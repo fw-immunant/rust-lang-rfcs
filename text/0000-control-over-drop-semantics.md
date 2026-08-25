@@ -14,7 +14,7 @@ title: Control over Drop semantics Pre-rfc
 
 ## Core Idea
 
-Currently, to customize drop behaviour for a type `T`, we have to wrap in a `ManuallyDrop` to prevent its destructor from being called, and then manually drop the item using `ManuallyDrop::drop`, which is an unsafe function. This prohibits authors from sharing these `ManuallyDrop` fields in public APIs safely.
+Currently, to customize the automatic portion of drop behaviour for a type `T`, we have to wrap in a `ManuallyDrop` to prevent its destructor from being called, and then manually drop the item using `ManuallyDrop::drop`, which is an unsafe function. This prohibits authors from sharing these `ManuallyDrop` fields in public APIs safely.
 
 To make this easier, this proposal will change how drop semantics work. Now, one would simply implement the `Destruct` trait's new `drop_in_place` method to customize the behaviour when an item is dropped. When the user does not provide an impementation for `Destruct::drop_in_place`, the compiler outputs the regular drop glue for the type. For example,
 
