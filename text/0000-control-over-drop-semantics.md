@@ -161,6 +161,8 @@ may be soundly possible to destroy from Rust by destroying each field,
 but destructors with side effects do exist and are an important use case for interoperability.
 
 ```rust
+extern "C" { fn cpp_dtor_uring_state(this: *mut UringState); }
+
 struct UringState {
     ring: Uring,
     buffers: [UringBuf; 16],
