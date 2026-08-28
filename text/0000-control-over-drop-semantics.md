@@ -22,7 +22,7 @@ This proposal would allow instead implementing the `Destruct` trait with its `dr
 When the user does not provide an implementation for `Destruct::drop_in_place`, the regular drop behavior for the type is preserved:
 a call to any `Drop::drop`, followed by the recursive destruction of each of its fields.
 
-### Status Quo with `ManuallyDrop`: C++ Compatibility Hazards
+## Motivation: Status Quo with `ManuallyDrop` - C++ Compatibility Hazards
 Using `ManuallyDrop` on fields makes object construction more verbose,
 but more importantly it raises compatibility hazards for bindings that expose foreign (e.g. C++) types in Rust.
 For fields that should be destroyed by C++ code,
