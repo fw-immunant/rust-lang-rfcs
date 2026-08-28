@@ -174,3 +174,56 @@ impl Destruct for UringState {
     }
 }
 ```
+
+### Avoiding Stack Overflow Dropping Recursive ADTs
+
+One use case for customizing destruction behavior for types would be to avoid an undesirable attributes of the default behavior,
+its propensity for stack overflow when dropping deeply nested recursive data structures.
+
+This is explored in the paper "Efficient Deconstruction with Typed Pointer Reversal (abstract)" by Munch-Maccagnoni and Donence [cite].
+
+While they note (§3.1) that their technique is not always applicable in Rust without changing the definition of types
+(because there may not be enough bits available in enum tags to track the necessary intermediate states of cleanup),
+this limitation could be overcome with explicit opt-in from the user, or possibly with an attribute macro on the type definition.
+
+#### Destructuring/Pattern Matching
+
+But they mention another limitation which suggests that it would be useful for this proposal to *not* forbid
+pattern matching on types with custom destruction behavior:
+
+> Rust also disables pattern-matching on owned values with custom destructor,
+when our algorithm is meant as a drop-in replacement of the default one.
+For all these reasons, some form of compiler support seems highly desirable.
+
+Indeed, allowing to specify a drop-in replacement of the default destruction behavior of Rust types is exactly what this proposal is about,
+and the `Drop` trait already allows types to opt out of destructuring pattern matching,
+so it seems advantageous to ensure that implementing the `Destruct` trait does not prevent types from being destruct*ured*.
+
+Furthermore, [previous discussion of C++ interop for destruction](https://github.com/rust-lang/lang-team/issues/135)
+touched on the desirability of still being able to pattern-match on types even if their destruction behavior matches C++.
+
+## Appendix: A leak amplification example
+
+A panicking destructor does not prevent other destructors in the same scope from running (see <https://github.com/rust-lang/rust/issues/14875>):
+```rust
+struct HoldsFooBar {
+    foo: Foo,
+    bar: Bar,
+}
+
+struct Foo;
+
+impl Drop for Foo {
+    fn drop(&mut self) { panic!(); }
+}
+
+struct Bar;
+impl Drop for Bar {
+    fn drop(&mut self) { println!("Bar dropped"); }
+}
+
+fn main() {
+    let _hfb = HoldsFooBar { foo: Foo, bar: Bar };
+}
+```
+This example prints "Bar dropped" after the panic from `Foo::drop` is displayed.
