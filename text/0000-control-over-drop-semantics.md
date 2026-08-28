@@ -32,7 +32,9 @@ but doing so would introduce bugs in mixed-language settings if Rust bindings do
 
 To make this situation less fraught, it is beneficial to be able to fully replace the Rust destruction behavior.
 In the case of C++ bindings, the Rust destruction behavior would simply call into the C++ destructor.
-For example,
+
+### An Example
+To demonstrate how the new API would be used, the following example:
 
 ```rust
 #![feature(const_destruct)]
@@ -52,13 +54,13 @@ fn main() {
 }
 ```
 
-has the output
+would have the output
 
 ```bash
 Hey i was dropped
 ```
 
-and leaks the memory of the `String`.
+and leak the memory of the `String`.
 
 ## Compiler Changes and Implementation Strategy
 
