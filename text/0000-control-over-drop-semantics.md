@@ -154,6 +154,12 @@ Prints "Foo dropped" and then "Bar dropped".
 
 ### Calling C++ Destructors
 
+It is UB to destroy C++ objects by simply destroying each of their fields the way Rust would,
+if the C++ destructor has side effects that the program depends on. [cite: [C++20 Standard, \[basic.life\] p5](https://timsong-cpp.github.io/cppwp/n4868/basic.life#5)]
+C++ classes that do not replace the default destructor (and as such have no side effects to their destruction)
+may be soundly possible to destroy from Rust by destroying each field,
+but destructors with side effects do exist and are an important use case for interoperability.
+
 ```rust
 struct UringState {
     ring: Uring,
