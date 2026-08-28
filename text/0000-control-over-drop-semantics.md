@@ -19,7 +19,7 @@ and then manually drop them using `ManuallyDrop::drop` (equivalent to `ptr::drop
 
 This proposal would allow instead implementing the `Destruct` trait with its `drop_in_place` method to customize the behavior when an object is dropped.
 When the user does not provide an implementation for `Destruct::drop_in_place`, the regular drop behavior for the type is preserved:
-a call to any `Drop::drop`, followed by the "drop glue" that drops each of its fields.
+a call to any `Drop::drop`, followed by the recursive destruction of each of its fields.
 For example,
 
 ```rust
