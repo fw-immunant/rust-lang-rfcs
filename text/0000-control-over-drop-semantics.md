@@ -204,7 +204,7 @@ impl Destruct for UringState {
 One use case for customizing destruction behavior for types would be to avoid an undesirable attributes of the default behavior,
 its propensity for stack overflow when dropping deeply nested recursive data structures.
 
-This is explored in the paper "Efficient Deconstruction with Typed Pointer Reversal (abstract)" by Munch-Maccagnoni and Donence [cite].
+This is explored in the paper ["Efficient Deconstruction with Typed Pointer Reversal (abstract)" by Munch-Maccagnoni and Donence](https://hal.science/hal-02177326).
 
 While they note (§3.1) that their technique is not always applicable in Rust without changing the definition of types
 (because there may not be enough bits available in enum tags to track the necessary intermediate states of cleanup),
