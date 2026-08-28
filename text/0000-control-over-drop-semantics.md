@@ -101,29 +101,56 @@ Further cleanups of these traits would be desirable, but are outside the scope o
 
 ## Real-life examples
 
-### Changing drop order
+### Changing Drop Order
+
+Rust currently guarantees that fields are dropped in their declaration order.
+Users can reorder fields to change this ordering (independently from changing the type's in-memory layout, if `#[repr(C)]` is not applied),
+but readers of Rust code are not used to the order fields being significant, and this hangs significant semantics off of a usually-ignored aspect of syntax.
+It is also possible to drop order by wrapping fields in `ManuallyDrop`, but this does not solve the problem in an open-shut fashion:
+the user must then write a custom `Drop` impl that drops those fields, which is not necessarily easy to do correctly.
+In particular, this impl is unlikely to exactly replicate the built-in automatic destruction behavior with respect to avoiding leak amplification.
+(The default destruction behavior temporarily catches the first panic that may occur when dropping fields, and before re-raising it, continues to drop fields, immediately aborting if a second field's drop implementation panics.)
+As such, it is no longer recommended (see <https://internals.rust-lang.org/t/need-for-controlling-drop-order-of-fields/12914> and the diff at <https://github.com/rust-lang/rust/pull/76150>)
+to use ManuallyDrop for this purpose (though the Rustonomicon contains an [outdated such suggestion](https://doc.rust-lang.org/nomicon/dropck.html#a-related-side-note-about-drop-order)).
+One reason for this is that if a custom `Drop` impl does not switch from unwinding to aborting for the second panic, some fields will simply be leaked,
+which can be a soundness issue if a type which is `Pin` has its destructor skipped (See <https://doc.rust-lang.org/std/pin/index.html#subtle-details-and-the-drop-guarantee:>).
+
+So we take it as granted that some types will have side-effects in their `Drop` implementations that might be mediated through I/O or FFI,
+and their relative destruction order will not be a concern of the borrow checker
+(if they interacted solely through Rust references, we would be in [dropck territory](https://doc.rust-lang.org/nomicon/dropck.html)).
+Thus an example might look like this, where external concerns require "Foo dropped" to be printed before "Bar dropped":
 
 ```rust
 use std::marker::Destruct;
 
-struct Context;
-
-struct Resource<'a> {
-    context: &'a Context,
+struct Foo;
+impl Drop for Foo {
+    fn drop(&mut self) {
+        println!("Foo dropped")
+    }
+}
+struct Bar;
+impl Drop for Bar {
+    fn drop(&mut self) {
+        println!("Bar dropped")
+    }
 }
 
-struct Data<'a> {
-    context: Context,
-    resource: Resource<'a>,
+// Normally, fields would be dropped in declaration order, with `bar` dropped before `foo`.
+struct HoldsBoth {
+    bar: Bar,
+    foo: Foo,
 }
 
-impl Destruct for Data {
-    unsafe fn drop_in_place(to_drop: *mut Self) {
-        Destruct::drop_in_place(to_drop.resource);
-        Destruct::drop_in_place(to_drop.context);
+// Drop `foo` before `bar`.
+impl Destruct for HoldsBoth {
+    unsafe fn drop_in_place(to_drop: &mut Self) {
+        Destruct::drop_in_place(&mut to_drop.foo);
+        Destruct::drop_in_place(&mut to_drop.bar);
     }
 }
 ```
+Prints "Foo dropped" and then "Bar dropped".
 
 ### Calling C++ Destructors
 
