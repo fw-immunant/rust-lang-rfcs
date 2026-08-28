@@ -1,18 +1,9 @@
----
-# System prepended metadata
+- Feature name: Control over Drop Semantics
+- Start date: 2026-08-27
+- Project Goal: https://rust-lang.github.io/rust-project-goals/2026/manually-drop-attr.html
+- WIP POC: [[POC] create an MVP for using `Destruct` for custom dtors](https://github.com/rust-lang/rust/pull/156090)
 
-title: Control over Drop semantics Pre-rfc
-
----
-
-# Control over Drop semantics Pre-rfc
-
-> [!info] Metadata
-> Project Goal: https://rust-lang.github.io/rust-project-goals/2026/manually-drop-attr.html
->
-> (very rough) POC: [[POC] create an MVP for using `Destruct` for custom dtors](https://github.com/rust-lang/rust/pull/156090)
-
-## Core Idea
+## Summary
 
 Currently, it is impossible to alter or replace the recursive calling of field destructors on user-defined types in Rust.
 The current workaround is to wrap a type's fields in `ManuallyDrop` to prevent the inner types' destructors from being called recursively,
