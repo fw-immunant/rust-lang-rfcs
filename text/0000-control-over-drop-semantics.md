@@ -81,14 +81,23 @@ unsafe fn drop_in_place(to_drop: *mut Self) {
 
 1. What's the difference between `Drop` and `Destruct`?
 
-   The difference between Destruct and Drop is as follows:
+- `Drop` is closer to a normal trait in that it may be implemented to specify user-defined cleanup for a type, which is strictly additive to the built-in per-field cleanup performed by "drop glue". The magic part is that when a value goes out of scope, the first step performed by the `core::ptr::drop_in_place` intrinsic is to call `Drop::drop` for your type if `Drop` is implemented, before the rest of the drop behavior kicks in (in particular, "drop glue" that cleans up the type's fields).
+- `Destruct` is today a fully builtin trait, much like `Sized`. It is implemented for basically every type in existence. It serves one purpose today: while every type implements `Destruct`, not all of them implement `const Destruct`. They do if all the `Drop` impls involved in dropping the given type (i.e., recursively so) are `const`. So this trait serves to characterize the constness of the drop behavior for a type, but does not currently have a way to alter that behavior.
 
-- Drop is an almost normal trait: you can implement it for your type, and use it as a trait bound (tho that's discouraged); the magic part is that the core::ptr::drop_in_place intrinsic, which is called when a value goes out of scope, will call Drop::drop for your type if Drop is implemented
-- Destruct is today a fully builtin trait, much like Sized. It is implemented for basically every type in existence. It serves one purpose today: while every type implements Destruct, not all of them implement const Destruct. They do if all the Drop impls involved in dropping the given type (i.e., recursively so) are const.
+2. Why is this implemented on `Destruct` instead of `Drop`?
 
-2. Why is this impemented on `Destruct` instead of `Drop`?
+This function is implemented on the `Destruct` trait as it is exactly the trait whose bounds capture whether "this type can go out of scope" and thus what dictates what happens when the type goes out of scope, which is what this RFC suggests to make user-controllable. This is further reinforced `Destruct` being the trait bound for `core::ptr::drop_in_place`. In the future, if these two traits are merged, this distinction will be simplified away.
 
-This function is implemented on the `Destruct` trait as it is exactly the trait that says "this type can go out of scope", i.e. exactly the trait that allows you to call `drop_in_place`. In the future, if these two get merged, its even better (fingers crossed).
+
+3. Why involve a second trait at all? Couldn't this be folded into `Drop`?
+
+In theory, it could, but `Destruct` is already around as a way to discuss the drop behavior of types,
+and the `Drop` trait has some historic infelicities, such as being usable as a trait bound but only in ways that are surprising.
+For example, `Vec<T>` implements `Drop` but `String` does not! The `Drop` bound does not mean "can this type be dropped", nor does it mean "does this type perform cleanup when dropped". At best, it means "is there specific user-specified impl of the `Drop` trait for this type", which is tautological and not a question about semantic *behavior*.
+
+The `Destruct` trait (`std::marker::Destruct`), on the other hand, is a specialized marker trait for items that can be dropped. It currently exists to tell the compiler whether the recursive act of dropping (including running generated "drop glue") is permissible within const evaluation.
+
+Further cleanups of these traits would be desirable, but are outside the scope of this RFC.
 
 ## Real-life examples
 
