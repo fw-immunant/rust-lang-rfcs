@@ -14,7 +14,8 @@ title: Control over Drop semantics Pre-rfc
 
 ## Core Idea
 
-Currently, to customize the automatic portion of drop behavior for a type `T`, we have to wrap its fields in `ManuallyDrop` to prevent their destructors from being called,
+Currently, it is impossible to alter or replace the recursive calling of field destructors on user-defined types in Rust.
+The current workaround is to wrap a type's fields in `ManuallyDrop` to prevent the inner types' destructors from being called recursively,
 and then manually drop them using `ManuallyDrop::drop` (equivalent to `ptr::drop_in_place`) in a `Drop` implementation for the type.
 
 This proposal would allow instead implementing the `Destruct` trait with its `drop_in_place` method to customize the behavior when an object is dropped.
