@@ -47,6 +47,8 @@ has the output
 Hey i was dropped
 ```
 
+and leaks the memory of the `String`.
+
 ## Changes and how it works
 
 If the compiler sees that there are no user implementations of Destruct while its finding the candidates for the implementatoin, only then does it assemble builtin candidates for `Destruct`. Otherwise, the user implementation is used and the builtin candidates are never assembled.
