@@ -174,13 +174,3 @@ impl Destruct for UringState {
     }
 }
 ```
-
-## Common Questions and Answers
-
-### What even is this `Destruct` trait?
-
-The `Destruct` trait (`std::marker::Destruct`) is a specialized marker trait for items that can be dropped. It exists to tell the compiler whether the recursive act of dropping (including generated "drop glue") is permissible within const evaluation.
-
-### How does this differ from `Drop`?
-
-The `Drop::drop` method is currently called from `ptr::drop_in_place` when a value goes out of scope:wq
