@@ -49,9 +49,9 @@ Hey i was dropped
 
 and leaks the memory of the `String`.
 
-## Changes and how it works
+## Compiler Changes and Implementation Strategy
 
-If the compiler sees that there are no user implementations of Destruct while its finding the candidates for the implementatoin, only then does it assemble builtin candidates for `Destruct`. Otherwise, the user implementation is used and the builtin candidates are never assembled.
+During trait resolution, if the compiler sees that there are no user implementations of `Destruct` when it searches for all candidates implementations of the trait, only then does it consider the builtin implementation (the traditional drop glue that drops each field) as a candidate. Otherwise, the user implementation is used and the builtin implementation is not generated.
 
 ## Details to decide
 
