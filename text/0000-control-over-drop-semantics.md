@@ -122,7 +122,6 @@ unsafe fn drop_in_place(to_drop: *mut Self) {
 
 This function is implemented on the `Destruct` trait as it is exactly the trait whose bounds capture whether "this type can go out of scope" and thus what dictates what happens when the type goes out of scope, which is what this RFC suggests to make user-controllable. This is further reinforced `Destruct` being the trait bound for `core::ptr::drop_in_place`. In the future, if these two traits are merged, this distinction will be simplified away.
 
-
 3. Why involve a second trait at all? Couldn't this be folded into `Drop`?
 
 In theory, it could, but `Destruct` is already around as a way to discuss the drop behavior of types,
