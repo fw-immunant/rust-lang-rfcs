@@ -134,10 +134,13 @@ It is also possible to drop order by wrapping fields in `ManuallyDrop`, but this
 the user must then write a custom `Drop` impl that drops those fields, which is not necessarily easy to do correctly.
 In particular, this impl is unlikely to exactly replicate the built-in automatic destruction behavior with respect to avoiding leak amplification.
 (The default destruction behavior temporarily catches the first panic that may occur when dropping fields, and before re-raising it, continues to drop fields, immediately aborting if a second field's drop implementation panics.)
-As such, it is no longer recommended (see <https://internals.rust-lang.org/t/need-for-controlling-drop-order-of-fields/12914> and the diff at <https://github.com/rust-lang/rust/pull/76150>)
-to use ManuallyDrop for this purpose (though the Rustonomicon contains an [outdated such suggestion](https://doc.rust-lang.org/nomicon/dropck.html#a-related-side-note-about-drop-order)).
+As such, it is no longer recommended (see [i.rlo discussion](https://internals.rust-lang.org/t/need-for-controlling-drop-order-of-fields/12914)
+and the diff on [rust-lang/rust PR #76150](https://github.com/rust-lang/rust/pull/76150))
+to use ManuallyDrop for this purpose (though the Rustonomicon contains an
+[outdated such suggestion](https://doc.rust-lang.org/nomicon/dropck.html#a-related-side-note-about-drop-order)).
 One reason for this is that if a custom `Drop` impl does not switch from unwinding to aborting for the second panic, some fields will simply be leaked,
-which can be a soundness issue if a type which is `Pin` has its destructor skipped (See <https://doc.rust-lang.org/std/pin/index.html#subtle-details-and-the-drop-guarantee:>).
+which can be a soundness issue if a type which is `Pin` has its destructor skipped
+(see [Pin's documentation](https://doc.rust-lang.org/std/pin/index.html#subtle-details-and-the-drop-guarantee:)).
 
 So we take it as granted that some types will have side-effects in their `Drop` implementations that might be mediated through I/O or FFI,
 and their relative destruction order will not be a concern of the borrow checker
@@ -179,7 +182,8 @@ Prints "Foo dropped" and then "Bar dropped".
 ### Calling C++ Destructors
 
 It is UB to destroy C++ objects by simply destroying each of their fields the way Rust would,
-if the C++ destructor has side effects that the program depends on. [cite: [C++20 Standard, \[basic.life\] p5](https://timsong-cpp.github.io/cppwp/n4868/basic.life#5)]
+if the C++ destructor has side effects that the program depends on.
+See the [C++20 Standard, \[basic.life\] p5](https://timsong-cpp.github.io/cppwp/n4868/basic.life#5).
 C++ classes that do not replace the default destructor (and as such have no side effects to their destruction)
 may be soundly possible to destroy from Rust by destroying each field,
 but destructors with side effects do exist and are an important use case for interoperability.
@@ -228,7 +232,7 @@ touched on the desirability of still being able to pattern-match on types even i
 
 ## Appendix: A leak amplification example
 
-A panicking destructor does not prevent other destructors in the same scope from running (see <https://github.com/rust-lang/rust/issues/14875>):
+A panicking destructor does not prevent other destructors in the same scope from running (see [rust-lang/rust#14875](https://github.com/rust-lang/rust/issues/14875)):
 ```rust
 struct HoldsFooBar {
     foo: Foo,
