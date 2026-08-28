@@ -33,6 +33,40 @@ but doing so would introduce bugs in mixed-language settings if Rust bindings do
 To make this situation less fraught, it is beneficial to be able to fully replace the Rust destruction behavior.
 In the case of C++ bindings, the Rust destruction behavior would simply call into the C++ destructor.
 
+## Detailed Design
+
+Change the signature of the `core::mem::Destruct` trait to the following, which will be the entry point for all automatic object destruction:
+```rust
+trait Destruct {
+    fn drop_in_place(&mut self);
+}
+```
+
+This method will have a default implementation that runs `Drop::drop` before dropping each field, which is the current behavior.
+
+If an explicit implementation of the trait provides a different implementation, it will replace the default destruction behavior for the type.
+
+The following diagram shows how `Destruct` and `Drop` might relate for an example type
+(where we give an explicit impl of `Destruct` which happens to do the same thing as the default behavior):
+```
+                              ┌───────────────────────────────────────────────────┐
+                              │ Destruct::drop_in_place(self: &mut Self) {        │
+struct BoxedFd {              │     Drop::drop(self);                             │
+    boxed_fd: Box<i32>,       │     core::intrinsics::drop_fields_in_place(self); │
+}                             │ }                                                 │
+                              └──────────────┬────────────────┬───────────────────┘
+                                 calls first │                │
+                              ┌──────────────┘                │  calls second
+                              │                               └─────────────────┐
+             ┌────────────────V───────────────┐                                 │
+             │ impl Drop for BoxedFd {        │       ┌─────────────────────────V────────────────────────────┐
+             │     fn drop(&mut self) {       │       │ "drop glue"                                          │
+             │         close(*self.boxed_fd); │       │ core::intrinsics::drop_fields_in_place(*mut self) {  │
+             │     }                          │       │     Destruct::drop_in_place(&raw (*self).boxed_fd)   │
+             │ }                              │       │ }                                                    │
+             └────────────────────────────────┘       └──────────────────────────────────────────────────────┘
+```
+
 ### An Example
 To demonstrate how the new API would be used, the following example:
 
