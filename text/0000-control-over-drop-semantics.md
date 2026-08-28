@@ -55,7 +55,7 @@ During trait resolution, if the compiler sees that there are no user implementat
 
 ## Details to decide
 
-1. Whether the compiler should straight-away insert the drop glue into the trait function, or have it do that in a `core::intrinsic` shim and have a blanket implementation for `Destruct` that calls this function. So the new `drop_in_place` function looks like
+1. Whether the compiler should directly insert the drop glue into the trait method, or have it do so in a `core::intrinsic` shim and have a blanket implementation for `Destruct` that calls this intrinsic. So the new `drop_in_place` function could look like
 
 ```rust
 #[lang = "destruct_drop_in_place"]
