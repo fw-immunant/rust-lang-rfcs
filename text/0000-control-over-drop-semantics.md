@@ -44,7 +44,7 @@ struct A {
 }
 
 impl Destruct for A {
-    unsafe fn drop_in_place(_to_drop: *mut Self) {
+    unsafe fn drop_in_place(_to_drop: &mut Self) {
         println!("Hey i was dropped");
     }
 }
@@ -169,7 +169,7 @@ struct UringState {
 }
 
 impl Destruct for UringState {
-    unsafe fn drop_in_place(to_drop: *mut Self) {
+    unsafe fn drop_in_place(to_drop: &mut Self) {
         cpp_dtor_uring_state(to_drop);
     }
 }
