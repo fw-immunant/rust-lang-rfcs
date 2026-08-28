@@ -260,3 +260,17 @@ fn main() {
 }
 ```
 This example prints "Bar dropped" after the panic from `Foo::drop` is displayed.
+
+## Drawbacks
+
+This does add more conceptual branches into answering "what happens when a value goes out of scope?", but possibly in a way that is more teachable:
+we can point to the `Destruct` trait's default behavior as where drop glue actually happens, which was more implicit previously.
+
+Terminologically, this is kind of a mess. I would really like to have a more formal delineation
+between `Drop`, `Destruct`, destruct*uring* "destruction", "destructors", and "drop glue".
+
+## Alternatives
+
+- Stick with the current design requiring `ManuallyDrop` on fields.
+  This has the ergonomic and maintenance costs noted for C++ code, and requiring `Drop` prevents destructuring,
+  which is a blocker for the "efficient drops"/avoiding stack overflow use case for ADTs.
