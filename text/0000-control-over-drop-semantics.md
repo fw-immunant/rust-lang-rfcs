@@ -274,3 +274,8 @@ between `Drop`, `Destruct`, destruct*uring* "destruction", "destructors", and "d
 - Stick with the current design requiring `ManuallyDrop` on fields.
   This has the ergonomic and maintenance costs noted for C++ code, and requiring `Drop` prevents destructuring,
   which is a blocker for the "efficient drops"/avoiding stack overflow use case for ADTs.
+- Implement with an attribute to opt out of destruction of individual fields or all fields,
+  rather than enhancing the `Destruct` trait.
+  Custom cleanup logic would then go in the `Drop` trait, which is undesirable for reasons discussed in the FAQ.
+  Or maybe we could introduce an entirely separate trait for such cleanup,
+  but that seems like a proliferation of magic traits since `Drop` and `Destruct` both already exist.
