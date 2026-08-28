@@ -21,6 +21,17 @@ and then manually drop them using `ManuallyDrop::drop` (equivalent to `ptr::drop
 This proposal would allow instead implementing the `Destruct` trait with its `drop_in_place` method to customize the behavior when an object is dropped.
 When the user does not provide an implementation for `Destruct::drop_in_place`, the regular drop behavior for the type is preserved:
 a call to any `Drop::drop`, followed by the recursive destruction of each of its fields.
+
+### Status Quo with `ManuallyDrop`: C++ Compatibility Hazards
+Using `ManuallyDrop` on fields makes object construction more verbose,
+but more importantly it raises compatibility hazards for bindings that expose foreign (e.g. C++) types in Rust.
+For fields that should be destroyed by C++ code,
+Rust code must wrap each with `ManuallyDrop` to prevent the containing type from destroying the child field recursively.
+In C++, adding a destructor to a type is not generally considered a breaking change,
+but doing so would introduce bugs in mixed-language settings if Rust bindings do not simultaneously add `ManuallyDrop` wrappers around any fields having that type.
+
+To make this situation less fraught, it is beneficial to be able to fully replace the Rust destruction behavior.
+In the case of C++ bindings, the Rust destruction behavior would simply call into the C++ destructor.
 For example,
 
 ```rust
