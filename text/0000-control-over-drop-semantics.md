@@ -29,7 +29,7 @@ In the case of C++ bindings, the Rust destruction behavior would simply call int
 The `core::mem::Destruct` now exposes the following interface, which will be the entry point for all automatic object destruction:
 ```rust
 trait Destruct {
-    fn drop_in_place(&mut self);
+    unsafe fn drop_in_place(&mut self);
 }
 ```
 
