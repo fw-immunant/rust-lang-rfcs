@@ -135,6 +135,8 @@ Further cleanups of these traits would be desirable, but are outside the scope o
 
 ## Real-life examples
 
+These examples compile and run with the PoC branch of the compiler.
+
 ### Changing Drop Order
 
 Rust currently guarantees that fields are dropped in their declaration order.
@@ -158,6 +160,7 @@ and their relative destruction order will not be a concern of the borrow checker
 Thus an example might look like this, where external concerns require "Foo dropped" to be printed before "Bar dropped":
 
 ```rust
+#![feature(const_destruct)]
 use std::marker::Destruct;
 
 struct Foo;
@@ -186,6 +189,10 @@ impl Destruct for HoldsBoth {
         Destruct::drop_in_place(&mut to_drop.bar);
     }
 }
+
+fn main(){
+	HoldsBoth { bar: Bar, foo: Foo };
+}
 ```
 Prints "Foo dropped" and then "Bar dropped".
 
@@ -199,8 +206,23 @@ may be soundly possible to destroy from Rust by destroying each field,
 but destructors with side effects do exist and are an important use case for interoperability.
 
 ```rust
+#![feature(const_destruct)]
+use std::marker::Destruct;
+
 extern "C" { fn cpp_dtor_uring_state(this: *mut UringState); }
 
+#[repr(C)]
+struct Uring {
+    raw: *mut std::ffi::c_void,
+}
+
+#[derive(Copy, Clone)]
+#[repr(C)]
+struct UringBuf {
+    buf: [u8; 64],
+}
+
+#[repr(C)]
 struct UringState {
     ring: Uring,
     buffers: [UringBuf; 16],
@@ -210,6 +232,10 @@ impl Destruct for UringState {
     unsafe fn drop_in_place(to_drop: &mut Self) {
         cpp_dtor_uring_state(to_drop);
     }
+}
+
+fn main() {
+  UringState { ring: Uring { raw: std::ptr::null_mut() }, buffers: [UringBuf { buf: [0; 64] }; 16] };
 }
 ```
 
