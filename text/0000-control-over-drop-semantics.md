@@ -533,3 +533,8 @@ fn main() {
 }
 ```
 This example prints "Bar dropped" after the panic from `Foo::drop` is displayed.
+
+## Future possibilities
+
+- Declarative control over drop order?
+- `#[derive(efficient_drop)]`?
