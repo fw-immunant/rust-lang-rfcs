@@ -316,16 +316,40 @@ During trait resolution, if the compiler sees that there are no user implementat
 
 ## Unresolved Questions
 
-1. Whether the compiler should directly insert the drop glue into the trait method, or have it do so in a `core::intrinsic` shim and have a blanket implementation for `Destruct` that calls this intrinsic. So the new `drop_in_place` function could look like
+1. A significant motivation of this RFC is to facilitate changing the drop order of fields.
+   An example demonstrates what this might look like, but the given code does not preserve the behavior
+   of built-in `Drop` with respect to panics (the first panic is temporarily caught to allow dropping subsequent fields,
+   and a second panic will immediately terminate). This avoids "leak amplification",
+   where a panic in a `Drop` impl causes memory leaks of sibling fields.
 
-```rust
-#[lang = "destruct_drop_in_place"]
-unsafe fn drop_in_place(to_drop: *mut Self) {
-    core::intrinsics::drop_in_place_shim(to_drop);
-}
-```
+   It is not clear how to cleanly emulate this drop behavior with user code.
+   Drawing on our `HasBoth` example, we might try a `fn drop_in_place` body like this:
+   ```rust
+   let mut panic_error = std::panic::catch_unwind(move || {
+       Foo::drop_in_place(&mut to_drop.foo)
+   }).err();
+   if let Err(e) = std::panic::catch_unwind(move || Bar::drop_in_place(&mut to_drop.bar)) {
+       if panic_error.is_some() {
+           std::process::abort();
+       } else {
+           panic_error = Some(e);
+       }
+   }
+   if let Some(e) = panic_error {
+       std::panic::resume_unwind(e);
+   }
+   ```
 
-## Appendix: A leak amplification example
+   However, it is forbidden to capture these mutable references to fields in closures:
+   we get E0277 ("may not be safely transferred across an unwind boundary") whether we capture
+   the `&mut HoldsBoth` or mutable references to its fields separately.
+
+   How can a user do the right thing here, and how can we make this easy to do?
+
+   This does not impact the use case of calling C++ destructors,
+   as those are separately forbidden from throwing exceptions across the FFI boundary.
+
+### A leak amplification example
 
 A panicking destructor does not prevent other destructors in the same scope from running (see [rust-lang/rust#14875](https://github.com/rust-lang/rust/issues/14875)):
 ```rust
