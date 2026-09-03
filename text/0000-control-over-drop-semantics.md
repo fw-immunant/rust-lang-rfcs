@@ -13,7 +13,14 @@ This proposal would allow instead implementing the `Destruct` trait with its `dr
 When the user does not provide an implementation for `Destruct::drop_in_place`, the regular drop behavior for the type is preserved:
 a call to any `Drop::drop`, followed by the recursive destruction of each of its fields.
 
-## Motivation: Status Quo with `ManuallyDrop` - C++ Compatibility Hazards
+## Motivation
+
+The current way to handle the lack of control over drop semantics is to wrap individual fields with `ManuallyDrop`
+and then use unsafe code in a `Drop` impl.
+For the various use cases that might non-default destruction behavior, this solution falls short in different respects.
+
+### C++ Compatibility Hazards
+
 Using `ManuallyDrop` on fields makes object construction more verbose,
 but more importantly it raises compatibility hazards for bindings that expose foreign (e.g. C++) types in Rust.
 For fields that should be destroyed by C++ code,
@@ -23,6 +30,191 @@ but doing so would introduce bugs in mixed-language settings if Rust bindings do
 
 To make this situation less fraught, it is beneficial to be able to fully replace the Rust destruction behavior.
 In the case of C++ bindings, the Rust destruction behavior would simply call into the C++ destructor.
+
+### Pattern-matching and `Drop`
+
+Some other use cases that desire control over drop behavior include changing the order in which fields are dropped
+or avoiding recursion, which can lead to stack overflow.
+
+In these cases, using `ManuallyDrop` and a custom `Drop` impl means that consumers can no longer pattern-match to access field values.
+This worsens ergonomics significantly for enums used to model ASTs, for example.
+There have been many requests for a way to somehow enable by-value pattern matching on types that require cleanup,
+but many past proposals suggest by-value `Drop`, and these efforts have not been successful.
+
+### Real-life examples
+
+These examples compile and run with the PoC branch of the compiler.
+
+#### Changing Drop Order
+
+Rust currently guarantees that fields are dropped in their declaration order.
+Users can reorder fields to change this ordering (independently from changing the type's in-memory layout, if `#[repr(C)]` is not applied),
+but readers of Rust code are not used to the order fields being significant, and this hangs significant semantics off of a usually-ignored aspect of syntax.
+It is also possible to drop order by wrapping fields in `ManuallyDrop`, but this does not solve the problem in an open-shut fashion:
+the user must then write a custom `Drop` impl that drops those fields, which is not necessarily easy to do correctly.
+In particular, this impl is unlikely to exactly replicate the built-in automatic destruction behavior with respect to avoiding leak amplification.
+(The default destruction behavior temporarily catches the first panic that may occur when dropping fields, and before re-raising it, continues to drop fields, immediately aborting if a second field's drop implementation panics.)
+As such, it is no longer recommended (see [i.rlo discussion](https://internals.rust-lang.org/t/need-for-controlling-drop-order-of-fields/12914)
+and the diff on [rust-lang/rust PR #76150](https://github.com/rust-lang/rust/pull/76150))
+to use ManuallyDrop for this purpose (though the Rustonomicon contains an
+[outdated such suggestion](https://doc.rust-lang.org/nomicon/dropck.html#a-related-side-note-about-drop-order)).
+One reason for this is that if a custom `Drop` impl does not switch from unwinding to aborting for the second panic, some fields will simply be leaked,
+which can be a soundness issue if a type which is `Pin` has its destructor skipped
+(see [Pin's documentation](https://doc.rust-lang.org/std/pin/index.html#subtle-details-and-the-drop-guarantee:)).
+
+So we take it as granted that some types will have side-effects in their `Drop` implementations that might be mediated through I/O or FFI,
+and their relative destruction order will not be a concern of the borrow checker
+(if they interacted solely through Rust references, we would be in [dropck territory](https://doc.rust-lang.org/nomicon/dropck.html)).
+Thus an example might look like this, where external concerns require "Foo dropped" to be printed before "Bar dropped":
+
+```rust
+#![feature(const_destruct)]
+use std::marker::Destruct;
+
+struct Foo;
+impl Drop for Foo {
+    fn drop(&mut self) {
+        println!("Foo dropped")
+    }
+}
+struct Bar;
+impl Drop for Bar {
+    fn drop(&mut self) {
+        println!("Bar dropped")
+    }
+}
+
+// Normally, fields would be dropped in declaration order, with `bar` dropped before `foo`.
+struct HoldsBoth {
+    bar: Bar,
+    foo: Foo,
+}
+
+// Drop `foo` before `bar`.
+impl Destruct for HoldsBoth {
+    unsafe fn drop_in_place(to_drop: &mut Self) {
+        Destruct::drop_in_place(&mut to_drop.foo);
+        Destruct::drop_in_place(&mut to_drop.bar);
+    }
+}
+
+fn main(){
+	HoldsBoth { bar: Bar, foo: Foo };
+}
+```
+Prints "Foo dropped" and then "Bar dropped".
+
+#### Calling C++ Destructors
+
+It is UB to destroy C++ objects by simply destroying each of their fields the way Rust would,
+if the C++ destructor has side effects that the program depends on.
+See the [C++20 Standard, \[basic.life\] p5](https://timsong-cpp.github.io/cppwp/n4868/basic.life#5).
+C++ classes that do not replace the default destructor (and as such have no side effects to their destruction)
+may be soundly possible to destroy from Rust by destroying each field,
+but destructors with side effects do exist and are an important use case for interoperability.
+
+```rust
+#![feature(const_destruct)]
+use std::marker::Destruct;
+
+extern "C" { fn cpp_dtor_uring_state(this: *mut UringState); }
+
+#[repr(C)]
+struct Uring {
+    raw: *mut std::ffi::c_void,
+}
+
+#[derive(Copy, Clone)]
+#[repr(C)]
+struct UringBuf {
+    buf: [u8; 64],
+}
+
+#[repr(C)]
+struct UringState {
+    ring: Uring,
+    buffers: [UringBuf; 16],
+}
+
+impl Destruct for UringState {
+    unsafe fn drop_in_place(to_drop: &mut Self) {
+        cpp_dtor_uring_state(to_drop);
+    }
+}
+
+fn main() {
+  UringState { ring: Uring { raw: std::ptr::null_mut() }, buffers: [UringBuf { buf: [0; 64] }; 16] };
+}
+```
+
+#### Avoiding Stack Overflow Dropping Recursive ADTs
+
+One use case for customizing destruction behavior for types would be to avoid an undesirable attributes of the default behavior,
+its propensity for stack overflow when dropping deeply nested recursive data structures.
+
+```rust
+#![feature(const_destruct)]
+use std::marker::Destruct;
+
+enum LinkedList<T> {
+    Cons(T, Box<LinkedList<T>>),
+    Nil,
+}
+
+// Drop the list iteratively, avoiding stack overflow.
+impl<T> Destruct for LinkedList<T> {
+    unsafe fn drop_in_place(mut to_drop: &mut Self) {
+        let mut temp: Self = LinkedList::Nil;
+        std::mem::swap(to_drop, &mut temp);
+        while let LinkedList::Cons(elem, rest) = temp {
+            // Box is destroyed here.
+            temp = *rest;
+        }
+    }
+}
+
+// Demonstrates that the elements are not leaked.
+struct LoudDrop<T: std::fmt::Debug>(T);
+
+impl<T: std::fmt::Debug> Drop for LoudDrop<T> {
+    fn drop(&mut self) {
+        println!("dropping {:?}", self.0)
+    }
+}
+
+fn main() {
+    let mut list = LinkedList::Nil;
+    for i in 0..999999 {
+        list = LinkedList::Cons(LoudDrop(i), Box::new(list));
+    }
+}
+```
+
+The above example exits cleanly with the given `Destruct` impl, but commenting out the impl results in a stack overflow.
+
+Such situations arise in the real world, e.g. [in serde_json](https://internals.rust-lang.org/t/pre-rfc-destructuring-values-that-impl-drop/10450/8).
+
+A general technique for producing destructors of this form is explored in the paper ["Efficient Deconstruction with Typed Pointer Reversal (abstract)" by Munch-Maccagnoni and Donence](https://hal.science/hal-02177326).
+
+While they note (§3.1) that their technique is not always applicable in Rust without changing the definition of types
+(because there may not be enough bits available in enum tags to track the necessary intermediate states of cleanup),
+this limitation could be overcome with explicit opt-in from the user, or possibly with an attribute macro on the type definition.
+
+##### Destructuring/Pattern Matching
+
+The authors mention another limitation which suggests that it would be useful for this proposal to *not* forbid
+pattern matching on types with custom destruction behavior:
+
+> Rust also disables pattern-matching on owned values with custom destructor,
+when our algorithm is meant as a drop-in replacement of the default one.
+For all these reasons, some form of compiler support seems highly desirable.
+
+Indeed, allowing to specify a drop-in replacement of the default destruction behavior of Rust types is exactly what the current RFC is about,
+and the `Drop` trait already allows types to opt out of destructuring pattern matching,
+so it seems advantageous to ensure that implementing the `Destruct` trait does not prevent types from being destruct*ured*.
+
+Furthermore, [previous discussion of C++ interop for destruction](https://github.com/rust-lang/lang-team/issues/135)
+touched on the desirability of still being able to pattern-match on types even if their destruction behavior matches C++.
 
 ## Guide-level explanation
 
@@ -97,22 +289,7 @@ and leak the memory of the `String`.
 
 Calling `Destruct::drop_in_place(&mut _to_drop.a)` in `A`'s `drop_in_place` method would result in the `String` being properly cleaned up.
 
-## Compiler Changes and Implementation Strategy
-
-During trait resolution, if the compiler sees that there are no user implementations of `Destruct` when it searches for all candidates implementations of the trait, only then does it consider the builtin implementation (the traditional drop glue that drops each field) as a candidate. Otherwise, the user implementation is used and the builtin implementation is not generated.
-
-## Unresolved Questions
-
-1. Whether the compiler should directly insert the drop glue into the trait method, or have it do so in a `core::intrinsic` shim and have a blanket implementation for `Destruct` that calls this intrinsic. So the new `drop_in_place` function could look like
-
-```rust
-#[lang = "destruct_drop_in_place"]
-unsafe fn drop_in_place(to_drop: *mut Self) {
-    core::intrinsics::drop_in_place_shim(to_drop);
-}
-```
-
-## FAQs
+### FAQs
 
 1. What's the difference between `Drop` and `Destruct`?
 
@@ -133,180 +310,20 @@ The `Destruct` trait (`std::marker::Destruct`), on the other hand, is a speciali
 
 Further cleanups of these traits would be desirable, but are outside the scope of this RFC.
 
-## Real-life examples
+## Compiler Changes and Implementation Strategy
 
-These examples compile and run with the PoC branch of the compiler.
+During trait resolution, if the compiler sees that there are no user implementations of `Destruct` when it searches for all candidates implementations of the trait, only then does it consider the builtin implementation (the traditional drop glue that drops each field) as a candidate. Otherwise, the user implementation is used and the builtin implementation is not generated.
 
-### Changing Drop Order
+## Unresolved Questions
 
-Rust currently guarantees that fields are dropped in their declaration order.
-Users can reorder fields to change this ordering (independently from changing the type's in-memory layout, if `#[repr(C)]` is not applied),
-but readers of Rust code are not used to the order fields being significant, and this hangs significant semantics off of a usually-ignored aspect of syntax.
-It is also possible to drop order by wrapping fields in `ManuallyDrop`, but this does not solve the problem in an open-shut fashion:
-the user must then write a custom `Drop` impl that drops those fields, which is not necessarily easy to do correctly.
-In particular, this impl is unlikely to exactly replicate the built-in automatic destruction behavior with respect to avoiding leak amplification.
-(The default destruction behavior temporarily catches the first panic that may occur when dropping fields, and before re-raising it, continues to drop fields, immediately aborting if a second field's drop implementation panics.)
-As such, it is no longer recommended (see [i.rlo discussion](https://internals.rust-lang.org/t/need-for-controlling-drop-order-of-fields/12914)
-and the diff on [rust-lang/rust PR #76150](https://github.com/rust-lang/rust/pull/76150))
-to use ManuallyDrop for this purpose (though the Rustonomicon contains an
-[outdated such suggestion](https://doc.rust-lang.org/nomicon/dropck.html#a-related-side-note-about-drop-order)).
-One reason for this is that if a custom `Drop` impl does not switch from unwinding to aborting for the second panic, some fields will simply be leaked,
-which can be a soundness issue if a type which is `Pin` has its destructor skipped
-(see [Pin's documentation](https://doc.rust-lang.org/std/pin/index.html#subtle-details-and-the-drop-guarantee:)).
-
-So we take it as granted that some types will have side-effects in their `Drop` implementations that might be mediated through I/O or FFI,
-and their relative destruction order will not be a concern of the borrow checker
-(if they interacted solely through Rust references, we would be in [dropck territory](https://doc.rust-lang.org/nomicon/dropck.html)).
-Thus an example might look like this, where external concerns require "Foo dropped" to be printed before "Bar dropped":
+1. Whether the compiler should directly insert the drop glue into the trait method, or have it do so in a `core::intrinsic` shim and have a blanket implementation for `Destruct` that calls this intrinsic. So the new `drop_in_place` function could look like
 
 ```rust
-#![feature(const_destruct)]
-use std::marker::Destruct;
-
-struct Foo;
-impl Drop for Foo {
-    fn drop(&mut self) {
-        println!("Foo dropped")
-    }
-}
-struct Bar;
-impl Drop for Bar {
-    fn drop(&mut self) {
-        println!("Bar dropped")
-    }
-}
-
-// Normally, fields would be dropped in declaration order, with `bar` dropped before `foo`.
-struct HoldsBoth {
-    bar: Bar,
-    foo: Foo,
-}
-
-// Drop `foo` before `bar`.
-impl Destruct for HoldsBoth {
-    unsafe fn drop_in_place(to_drop: &mut Self) {
-        Destruct::drop_in_place(&mut to_drop.foo);
-        Destruct::drop_in_place(&mut to_drop.bar);
-    }
-}
-
-fn main(){
-	HoldsBoth { bar: Bar, foo: Foo };
+#[lang = "destruct_drop_in_place"]
+unsafe fn drop_in_place(to_drop: *mut Self) {
+    core::intrinsics::drop_in_place_shim(to_drop);
 }
 ```
-Prints "Foo dropped" and then "Bar dropped".
-
-### Calling C++ Destructors
-
-It is UB to destroy C++ objects by simply destroying each of their fields the way Rust would,
-if the C++ destructor has side effects that the program depends on.
-See the [C++20 Standard, \[basic.life\] p5](https://timsong-cpp.github.io/cppwp/n4868/basic.life#5).
-C++ classes that do not replace the default destructor (and as such have no side effects to their destruction)
-may be soundly possible to destroy from Rust by destroying each field,
-but destructors with side effects do exist and are an important use case for interoperability.
-
-```rust
-#![feature(const_destruct)]
-use std::marker::Destruct;
-
-extern "C" { fn cpp_dtor_uring_state(this: *mut UringState); }
-
-#[repr(C)]
-struct Uring {
-    raw: *mut std::ffi::c_void,
-}
-
-#[derive(Copy, Clone)]
-#[repr(C)]
-struct UringBuf {
-    buf: [u8; 64],
-}
-
-#[repr(C)]
-struct UringState {
-    ring: Uring,
-    buffers: [UringBuf; 16],
-}
-
-impl Destruct for UringState {
-    unsafe fn drop_in_place(to_drop: &mut Self) {
-        cpp_dtor_uring_state(to_drop);
-    }
-}
-
-fn main() {
-  UringState { ring: Uring { raw: std::ptr::null_mut() }, buffers: [UringBuf { buf: [0; 64] }; 16] };
-}
-```
-
-### Avoiding Stack Overflow Dropping Recursive ADTs
-
-One use case for customizing destruction behavior for types would be to avoid an undesirable attributes of the default behavior,
-its propensity for stack overflow when dropping deeply nested recursive data structures.
-
-```rust
-#![feature(const_destruct)]
-use std::marker::Destruct;
-
-enum LinkedList<T> {
-    Cons(T, Box<LinkedList<T>>),
-    Nil,
-}
-
-// Drop the list iteratively, avoiding stack overflow.
-impl<T> Destruct for LinkedList<T> {
-    unsafe fn drop_in_place(mut to_drop: &mut Self) {
-        let mut temp: Self = LinkedList::Nil;
-        std::mem::swap(to_drop, &mut temp);
-        while let LinkedList::Cons(elem, rest) = temp {
-            // Box is destroyed here.
-            temp = *rest;
-        }
-    }
-}
-
-// Demonstrates that the elements are not leaked.
-struct LoudDrop<T: std::fmt::Debug>(T);
-
-impl<T: std::fmt::Debug> Drop for LoudDrop<T> {
-    fn drop(&mut self) {
-        println!("dropping {:?}", self.0)
-    }
-}
-
-fn main() {
-    let mut list = LinkedList::Nil;
-    for i in 0..999999 {
-        list = LinkedList::Cons(LoudDrop(i), Box::new(list));
-    }
-}
-```
-
-The above example exits cleanly with the given `Destruct` impl, but commenting out the impl results in a stack overflow.
-
-Such situations arise in the real world, e.g. [in serde_json](https://internals.rust-lang.org/t/pre-rfc-destructuring-values-that-impl-drop/10450/8).
-
-A general technique for producing destructors of this form is explored in the paper ["Efficient Deconstruction with Typed Pointer Reversal (abstract)" by Munch-Maccagnoni and Donence](https://hal.science/hal-02177326).
-
-While they note (§3.1) that their technique is not always applicable in Rust without changing the definition of types
-(because there may not be enough bits available in enum tags to track the necessary intermediate states of cleanup),
-this limitation could be overcome with explicit opt-in from the user, or possibly with an attribute macro on the type definition.
-
-#### Destructuring/Pattern Matching
-
-The authors mention another limitation which suggests that it would be useful for this proposal to *not* forbid
-pattern matching on types with custom destruction behavior:
-
-> Rust also disables pattern-matching on owned values with custom destructor,
-when our algorithm is meant as a drop-in replacement of the default one.
-For all these reasons, some form of compiler support seems highly desirable.
-
-Indeed, allowing to specify a drop-in replacement of the default destruction behavior of Rust types is exactly what the current RFC is about,
-and the `Drop` trait already allows types to opt out of destructuring pattern matching,
-so it seems advantageous to ensure that implementing the `Destruct` trait does not prevent types from being destruct*ured*.
-
-Furthermore, [previous discussion of C++ interop for destruction](https://github.com/rust-lang/lang-team/issues/135)
-touched on the desirability of still being able to pattern-match on types even if their destruction behavior matches C++.
 
 ## Appendix: A leak amplification example
 
