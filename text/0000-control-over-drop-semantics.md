@@ -37,26 +37,33 @@ This method has a default implementation that runs `Drop::drop` before dropping 
 
 If an explicit implementation of the trait provides a different implementation, it will replace the default destruction behavior for the type.
 
-The following diagram shows how `Destruct` and `Drop` might relate for an example type
-(where we give an explicit impl of `Destruct` which happens to do the same thing as the default behavior):
+The following diagram shows how `Destruct`'s default implementation can be understood for an example type:
 ```
-                              ┌───────────────────────────────────────────────────┐
-                              │ Destruct::drop_in_place(self: &mut Self) {        │
-struct BoxedFd {              │     Drop::drop(self);                             │
-    boxed_fd: Box<i32>,       │     core::intrinsics::drop_fields_in_place(self); │
-}                             │ }                                                 │
-                              └──────────────┬────────────────┬───────────────────┘
+                              ┌─────────────────────────────────────────────────────────────┐
+                              │ Destruct::drop_in_place(self: &mut Self) {                  │
+struct BoxedFd {              │     Drop::drop(self); // A custom impl could not call this! │
+    boxed_fd: Box<i32>,       │     core::intrinsics::drop_fields_in_place(self);           │
+}                             │ }                                                           │
+                              └──────────────┬────────────────┬─────────────────────────────┘
                                  calls first │                │
                               ┌──────────────┘                │  calls second
                               │                               └─────────────────┐
              ┌────────────────V───────────────┐                                 │
              │ impl Drop for BoxedFd {        │       ┌─────────────────────────V────────────────────────────┐
              │     fn drop(&mut self) {       │       │ "drop glue"                                          │
-             │         close(*self.boxed_fd); │       │ core::intrinsics::drop_fields_in_place(*mut self) {  │
-             │     }                          │       │     Destruct::drop_in_place(&raw (*self).boxed_fd)   │
+             │         close(*self.boxed_fd); │       │ core::intrinsics::drop_fields_in_place(&mut self) {  │
+             │     }                          │       │     Destruct::drop_in_place(&raw self.boxed_fd)      │
              │ }                              │       │ }                                                    │
              └────────────────────────────────┘       └──────────────────────────────────────────────────────┘
 ```
+
+Note that:
+  1. The default behavior runs the `Drop` impl for the type before dropping individual fields.
+     An explicit implementation of `Destruct` could not call into `Drop`, because explicitly invoking `.drop()` is forbidden.
+     As such, it is an error to implement both `Destruct` and `Drop` for the same type.
+  2. `core::intrinsics::drop_fields_in_place` intrinsic does not actually exist.
+     It might be convenient to add this to expose only the recursive portion of drop glue, but this is not strictly
+     necessary; a user can also manually call `Destruct::drop_in_place` on each field in sequence.
 
 ### An Example
 To demonstrate how the new API would be used, the following example:
