@@ -310,9 +310,9 @@ The `Destruct` trait (`std::marker::Destruct`), on the other hand, is a speciali
 
 Further cleanups of these traits would be desirable, but are outside the scope of this RFC.
 
-## Compiler Changes and Implementation Strategy
+## Reference-level explanation
 
-During trait resolution, if the compiler sees that there are no user implementations of `Destruct` when it searches for all candidates implementations of the trait, only then does it consider the builtin implementation (the traditional drop glue that drops each field) as a candidate. Otherwise, the user implementation is used and the builtin implementation is not generated.
+TODO
 
 ## Unresolved Questions
 
