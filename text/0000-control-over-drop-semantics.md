@@ -342,7 +342,15 @@ we can point to the `Destruct` trait's default behavior as where drop glue actua
 Terminologically, this is kind of a mess. I would really like to have a more formal delineation
 between `Drop`, `Destruct`, destruct*uring* "destruction", "destructors", and "drop glue".
 
-## Alternatives
+## Rationale and alternatives
+
+### Rationale
+
+The basic rationale for this design is that the process of destroying a value can currently be partially
+(through `std::mem::Drop`) but not fully customized.
+Introducing the ability to manually implement the `Destruct` trait allows full customization of this process.
+
+### Alternatives
 
 - Stick with the current design requiring `ManuallyDrop` on fields.
   This has the ergonomic and maintenance costs noted for C++ code, and requiring `Drop` prevents destructuring,
