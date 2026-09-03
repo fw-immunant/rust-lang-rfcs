@@ -401,3 +401,135 @@ Introducing the ability to manually implement the `Destruct` trait allows full c
   Custom cleanup logic would then go in the `Drop` trait, which is undesirable for reasons discussed in the FAQ.
   Or maybe we could introduce an entirely separate trait for such cleanup,
   but that seems like a proliferation of magic traits since `Drop` and `Destruct` both already exist.
+
+## Prior art
+
+I'm not aware of other languages that try to navigate a similar set of design concerns.
+
+Within Rust, there have been numerous other RFCs and design proposals that overlap to some degree with this one.
+Most have to do with changes to `Drop` itself, e.g. making it accepts its argument by value or
+enabling destructuring of values whose types impl `Drop`.
+Some of them could enable better support for the recursive-drop use case, but none discuss the C++
+interoperability use-case, and most would not enable it.
+
+Chronologically:
+
+- 2015-01-23:
+  #### [RFCs issue #713: Potential generalization of destructing struct destructuring](https://github.com/rust-lang/rfcs/issues/713), also: [rust-lang/rust Issue #11855](https://github.com/rust-lang/rust/issues/11855) (2014-01-23)
+
+  This mostly concerns being able to prevent drop glue from running, while potentially moving fields out.
+  `ManuallyDrop` seems to cover this use case now.
+
+- 2015-02-04:
+  #### [Moves from `self` during the drop hook](https://internals.rust-lang.org/t/moves-from-self-during-the-drop-hook/1536)
+
+  TODO: explain and relate to the current RFC
+
+- 2015-02-19:
+  #### [Pre-RFC: Allow partial moves before `forget`](https://internals.rust-lang.org/t/pre-rfc-allow-partial-moves-before-forget/1620)
+
+  TODO: explain and relate to the current RFC
+
+- 2015-04-08:
+  #### [Pre-RFC: allow by-value drop](https://internals.rust-lang.org/t/pre-rfc-allow-by-value-drop/1845)
+
+  Proposes a `Destroy` trait that accepts `self` by value.
+  This trait would not impede destructuring; the idea is that impls of `Destroy::destroy` would destructure
+  or `std::mem::leak` their argument.
+
+  Note, by-value drop is problematic due to interactions with DSTs.
+
+- 2015-06-29:
+  #### [RFC #1180: Propose `Interior<T>` data-type, to allow moves out of the dropped value during the drop hook.](https://github.com/rust-lang/rfcs/pull/1180)
+
+  Proposes a `DropGlue` marker type and an `Interior<T>` type to use for the the argument of a new `DropValue::drop_value`
+  trait that would replace the internals of `Drop::drop`, and allow partial moves out of the dropped value.
+
+  RFC #1180 was closed in favor of unsafe unions, which enabled `SmallVec<T>`.
+
+- 2017-01-19:
+  #### [RFC #1857: Stabilize drop order](https://github.com/rust-lang/rfcs/blob/master/text/1857-stabilize-drop-order.md)
+
+  This accepted RFC stabilized the current drop order, which was previously an unstable implementation detail.
+  It left open the possibility of alternative drop ordering being possible in the future:
+
+  > Finally, in case people really dislike the current drop order, it may still be possible to introduce alternative, opt-in, drop orders in a backwards compatible way. However, that is not covered in this RFC \[(#1857)\].
+
+- 2017-01-27:
+  #### [RFCs issue #744: should struct fields and array elements be dropped in reverse declaration order (a la C++)](https://github.com/rust-lang/rfcs/issues/744)
+
+  The "right" order to drop elements of aggregate types was discussed extensively here.
+  It was mostly agreed that the drop order implemented by Rust (order of declaration for structs, generally left-to-right and top-to-bottom)
+  was not ideal as it is the opposite of the order for locals, but by this time it was too late to suddenly change it
+  due to existing code depending on the drop order.
+  The discussion also concludes that there is not a single drop order that is obviously best for all code.
+
+- 2018-10-24:
+  #### [pre-RFC: the Destruct trait](https://internals.rust-lang.org/t/pre-rfc-the-destruct-trait/8658)
+
+  Proposes a `Destruct` trait whose method accepts `self` by value, which would be constrained to immediately pattern-match its argument
+  and which does not replace drop glue entirely but instead replaces only the second, recursive phase performed after a `Drop` impl runs.
+  Proposes that for types that implement both the `Destruct` trait, pattern matching is allowed even if the type also implements `Drop`.
+
+  Note, accepting `self` by value is problematic for DSTs.
+  Pattern matching in this way would not help with the use case of calling C++ destructors.
+
+- 2019-06-22:
+  #### [\[Pre-RFC\] Destructuring values that impl Drop](https://internals.rust-lang.org/t/pre-rfc-destructuring-values-that-impl-drop/10450)
+
+  Proposes a `#[avoid_drop]` attribute that would allow destructuring values that impl `Drop` without running their `Drop` impl.
+
+  Discussion here mentions that `serde` would benefit from the ability to replace default drop glue
+  because of overflowing the stack on recursive `Drop`, but the particular proposal discussed would not
+  offer a solution for this use case.
+
+- 2022-01-05:
+  #### [lang-team issue #135: Interoperability With C++ Destruction Order](https://github.com/rust-lang/lang-team/issues/135)
+
+  Describes the C++ interop use case that the current RFC also targets.
+  Suggests a `#[manually_drop]` attribute that might apply to all fields of a type,
+  but its example for controlling order of field drops does not work as written;
+  it performs `std::mem::drop(&mut self.field);` inside the definition of `Drop::drop`,
+  and `std::mem::drop` on a mutable reference is a no-op.
+
+  It also suggests the alternative of a `#[drop_order(from_end)]` attribute;
+  this could help matching C++ destructor drop ordering for fields,
+  but would not enable calling into C++ destructors over FFI without the current `ManuallyDrop` workaround.
+
+  The current RFC would supersede this proposal; it is the current incarnation of this effort.
+
+- 2023-07-30:
+  #### [RFC #3466: Destructuring `Drop` ADTs via `ManuallyDrop`](https://github.com/rust-lang/rfcs/pull/3466)
+
+  Suggests to "Extend the special‐case move‐out‐of‐deref behavior of `Box<T>` to `ManuallyDrop<T>`" and
+  "allow partial moves out of a `T` stored inside `ManuallyDrop<T>` even when there is a `Drop` impl for `T`."
+
+- 2024-06-08:
+  #### [Destructuring Droppable structs](https://internals.rust-lang.org/t/destructuring-droppable-structs/20993)
+
+  Proposes to turn E509 (moving out of a type that impls `Drop`) from an error into a warning.
+
+  Though related to other proposals to allow destructuring in the presence of a `Drop` impl,
+  this does not provide an alternative for the use cases of the current RFC.
+
+- 2024-12-08:
+  #### [RFC #3738: Drop type destructuring](https://github.com/rust-lang/rfcs/pull/3738)
+
+  Proposes a `destructure!` macro that allows moving fields out of a type that implements `Drop` without its destructor running.
+  This is not sufficient for the C++ or recursive data structure use cases, but has some conceptual overlap.
+  The current idiom for writing operations of this form also relies on `ManuallyDrop`.
+
+  In the current RFC, types that desire this pattern could be redefined using `Destruct` instead of `Drop`,
+  which would enable pattern matching on them; they would need to rely on privacy to prevent fields being moved out
+  by code outside of their defining module.
+
+- 2026-03-21:
+  #### [Fixing `Drop` so we don't need `Destruct`](https://rust-lang.zulipchat.com/#narrow/channel/213817-t-lang/topic/Fixing.20.60Drop.60.20so.20we.20don.27t.20need.20.60Destruct.60)
+
+  Plans steps to fix the useless and confusing meaning of `Drop` bounds in future Rust editions,
+  while unifying the `Destruct` and `Drop` traits.
+
+  This would not conflict with the current proposal, but would mean that instead of the current proposal's suggested error when
+  both `Drop` and `Destruct` are implemented , it would be an error to implement both the `drop` and `drop_in_place` methods of the `Drop` trait.
+  The differing semantics of these two methods (`drop` having fields automatically dropped afterward while `drop_in_place` does not)
+  might call for other renamings to maintain clarity.
