@@ -24,16 +24,16 @@ but doing so would introduce bugs in mixed-language settings if Rust bindings do
 To make this situation less fraught, it is beneficial to be able to fully replace the Rust destruction behavior.
 In the case of C++ bindings, the Rust destruction behavior would simply call into the C++ destructor.
 
-## Detailed Design
+## Guide-level explanation
 
-Change the signature of the `core::mem::Destruct` trait to the following, which will be the entry point for all automatic object destruction:
+The `core::mem::Destruct` now exposes the following interface, which will be the entry point for all automatic object destruction:
 ```rust
 trait Destruct {
     fn drop_in_place(&mut self);
 }
 ```
 
-This method will have a default implementation that runs `Drop::drop` before dropping each field, which is the current behavior.
+This method has a default implementation that runs `Drop::drop` before dropping each field, which was the behavior prior to this RFC.
 
 If an explicit implementation of the trait provides a different implementation, it will replace the default destruction behavior for the type.
 
