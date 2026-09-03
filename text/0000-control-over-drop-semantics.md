@@ -71,6 +71,7 @@ To demonstrate how the new API would be used, the following example:
 ```rust
 #![feature(const_destruct)]
 use std::marker::Destruct;
+
 struct A {
     a: String,
 }
@@ -82,7 +83,7 @@ impl Destruct for A {
 }
 
 fn main() {
-    let a = A { a: String::new() };
+    let a = A { a: String::from("some string data") };
 }
 ```
 
@@ -93,6 +94,8 @@ Hey i was dropped
 ```
 
 and leak the memory of the `String`.
+
+Calling `Destruct::drop_in_place(&mut _to_drop.a)` in `A`'s `drop_in_place` method would result in the `String` being properly cleaned up.
 
 ## Compiler Changes and Implementation Strategy
 
