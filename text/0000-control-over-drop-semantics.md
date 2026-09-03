@@ -101,7 +101,7 @@ Calling `Destruct::drop_in_place(&mut _to_drop.a)` in `A`'s `drop_in_place` meth
 
 During trait resolution, if the compiler sees that there are no user implementations of `Destruct` when it searches for all candidates implementations of the trait, only then does it consider the builtin implementation (the traditional drop glue that drops each field) as a candidate. Otherwise, the user implementation is used and the builtin implementation is not generated.
 
-## Details to decide
+## Unresolved Questions
 
 1. Whether the compiler should directly insert the drop glue into the trait method, or have it do so in a `core::intrinsic` shim and have a blanket implementation for `Destruct` that calls this intrinsic. So the new `drop_in_place` function could look like
 
