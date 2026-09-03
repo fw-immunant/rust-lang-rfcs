@@ -244,7 +244,49 @@ fn main() {
 One use case for customizing destruction behavior for types would be to avoid an undesirable attributes of the default behavior,
 its propensity for stack overflow when dropping deeply nested recursive data structures.
 
-This is explored in the paper ["Efficient Deconstruction with Typed Pointer Reversal (abstract)" by Munch-Maccagnoni and Donence](https://hal.science/hal-02177326).
+```rust
+#![feature(const_destruct)]
+use std::marker::Destruct;
+
+enum LinkedList<T> {
+    Cons(T, Box<LinkedList<T>>),
+    Nil,
+}
+
+// Drop the list iteratively, avoiding stack overflow.
+impl<T> Destruct for LinkedList<T> {
+    unsafe fn drop_in_place(mut to_drop: &mut Self) {
+        let mut temp: Self = LinkedList::Nil;
+        std::mem::swap(to_drop, &mut temp);
+        while let LinkedList::Cons(elem, rest) = temp {
+            // Box is destroyed here.
+            temp = *rest;
+        }
+    }
+}
+
+// Demonstrates that the elements are not leaked.
+struct LoudDrop<T: std::fmt::Debug>(T);
+
+impl<T: std::fmt::Debug> Drop for LoudDrop<T> {
+    fn drop(&mut self) {
+        println!("dropping {:?}", self.0)
+    }
+}
+
+fn main() {
+    let mut list = LinkedList::Nil;
+    for i in 0..999999 {
+        list = LinkedList::Cons(LoudDrop(i), Box::new(list));
+    }
+}
+```
+
+The above example exits cleanly with the given `Destruct` impl, but commenting out the impl results in a stack overflow.
+
+Such situations arise in the real world, e.g. [in serde_json](https://internals.rust-lang.org/t/pre-rfc-destructuring-values-that-impl-drop/10450/8).
+
+A general technique for producing destructors of this form is explored in the paper ["Efficient Deconstruction with Typed Pointer Reversal (abstract)" by Munch-Maccagnoni and Donence](https://hal.science/hal-02177326).
 
 While they note (§3.1) that their technique is not always applicable in Rust without changing the definition of types
 (because there may not be enough bits available in enum tags to track the necessary intermediate states of cleanup),
@@ -252,14 +294,14 @@ this limitation could be overcome with explicit opt-in from the user, or possibl
 
 #### Destructuring/Pattern Matching
 
-But they mention another limitation which suggests that it would be useful for this proposal to *not* forbid
+The authors mention another limitation which suggests that it would be useful for this proposal to *not* forbid
 pattern matching on types with custom destruction behavior:
 
 > Rust also disables pattern-matching on owned values with custom destructor,
 when our algorithm is meant as a drop-in replacement of the default one.
 For all these reasons, some form of compiler support seems highly desirable.
 
-Indeed, allowing to specify a drop-in replacement of the default destruction behavior of Rust types is exactly what this proposal is about,
+Indeed, allowing to specify a drop-in replacement of the default destruction behavior of Rust types is exactly what the current RFC is about,
 and the `Drop` trait already allows types to opt out of destructuring pattern matching,
 so it seems advantageous to ensure that implementing the `Destruct` trait does not prevent types from being destruct*ured*.
 
