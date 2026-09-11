@@ -17,7 +17,7 @@ a call to any `Drop::drop`, followed by the recursive destruction of each of its
 
 The current way to handle the lack of control over drop semantics is to wrap individual fields with `ManuallyDrop`
 and then use unsafe code in a `Drop` impl.
-For the various use cases that might non-default destruction behavior, this solution falls short in different respects.
+For the various use cases that might call for non-default destruction behavior, this solution falls short in different respects.
 
 ### C++ compatibility hazards
 
