@@ -5,8 +5,8 @@
 
 ## Summary
 
-Currently, it is impossible to alter or replace the recursive calling of field destructors on user-defined types in Rust.
-The current workaround is to wrap a type's fields in `ManuallyDrop` to prevent the inner types' destructors from being called recursively,
+Currently, it is impossible to alter or replace the recursive dropping of fields of user-defined types in Rust.
+The current workaround is to wrap a type's fields in `ManuallyDrop` to prevent the inner types' drop glue from being called recursively,
 and then manually drop them using `ManuallyDrop::drop` (equivalent to `ptr::drop_in_place`) in a `Drop` implementation for the type.
 
 This proposal would allow instead implementing the `Destruct` trait with its `drop_in_place` method to customize the behavior when an object is dropped.
@@ -60,7 +60,7 @@ and the diff on [rust-lang/rust PR #76150](https://github.com/rust-lang/rust/pul
 to use ManuallyDrop for this purpose (though the Rustonomicon contains an
 [outdated such suggestion](https://doc.rust-lang.org/nomicon/dropck.html#a-related-side-note-about-drop-order)).
 One reason for this is that if a custom `Drop` impl does not switch from unwinding to aborting for the second panic, some fields will simply be leaked,
-which can be a soundness issue if a type which is `Pin` has its destructor skipped and its memory is reused
+which can be a soundness issue if a type which is `Pin` has its `Drop::drop` skipped and its memory is reused
 (see [Pin's documentation](https://doc.rust-lang.org/std/pin/index.html#subtle-details-and-the-drop-guarantee:)).
 
 So we take it as granted that some types will have side-effects in their `Drop` implementations that might be mediated through I/O or FFI,
@@ -358,13 +358,35 @@ avoiding confusion due to the reversed order required by manual construction of 
 
 TODO
 
+
 ## Drawbacks
 
-This does add more conceptual branches into answering "what happens when a value goes out of scope?", but possibly in a way that is more teachable:
-we can point to the `Destruct` trait's default behavior as where drop glue actually happens, which was more implicit previously.
-
-Terminologically, this is kind of a mess. I would really like to have a more formal delineation
-between `Drop`, `Destruct`, destruct*uring* "destruction", "destructors", and "drop glue".
+- This does add more conceptual branches into answering "what happens when a value goes out of scope?", but possibly in a way that is more teachable:
+  we can point to the `Destruct` trait's default behavior as where drop glue actually happens, which was more implicit previously.
+- An impl of `Destruct` that forgets to call `Destruct::drop_in_place` on a field will leak its value.
+  The compiler could gain a lint on any fields of `drop_in_place`'s argument that are not used.
+- Terminologically, this is somewhat confusing. The relationship between terms used here should be explicit.
+  In particular:
+  - "dropping" a value is allowing it to go out of scope without having been moved from, and is when a call to drop glue is inserted.
+  - "drop glue" is a term that refers to the whole of cleanup done for a value when it goes out of scope,
+    which generally consists of running the `Drop` impl for a value of the type and then dropping its fields.
+  - "destructor" is not a well-defined term in Rust, and this RFC tries to avoid using it to reference Rust values in favor
+    of explicitly referring to either "drop glue" (which includes cleanup for the value itself as well as for its fields) or
+    `Drop::drop` (which performs only cleanup for resources represented by the value itself, not its fields).
+    The general term is used to refer to destructors in other languages, such as C++.
+  - `Drop` is the trait that defines cleanup to be performed for the resources represented by a value of a type,
+    separately from any cleanup to be performed for the individual fields of that type by the `Drop` impls for their types.
+    Implementing `Drop` also forbids moving out of fields of the type, as this would mean the type is no longer fully initialized,
+    preventing the drop glue and therefore `Drop::drop` method from running on the type.
+  - `Destruct` is a trait that captures the ability for a value to be dropped, and in this proposal allows for
+    overriding the drop glue entirely by implementing the `Destruct::drop_in_place` method.
+    When this is done, `Drop::drop` will not be called, and logic present in `Drop::drop` for a type
+    should instead be performed in its impl of `Destruct::drop_in_place`.
+  - Destructuring is the ability to decompose a value into its fields via pattern matching,
+    and when the value is pattern-matched by move, this is forbidden if the value has a `Drop` implementation.
+    This RFC does not change this behavior, but when `Destruct::drop_in_place` is implemented for a type,
+    the role of the `Drop` trait for that type is relegated to only controlling whether the type is permitted
+    to have its fields moved from.
 
 ## Rationale and alternatives
 
@@ -416,11 +438,11 @@ Chronologically:
 - 2015-02-04:
   #### [Moves from `self` during the drop hook](https://internals.rust-lang.org/t/moves-from-self-during-the-drop-hook/1536)
 
-  Proposed a `DropPtr` type, which would behave somewhat similarly to `ManuallyDrop` in that it would suppress the destructor of a wrapped type,
+  Proposed a `DropPtr` type, which would behave somewhat similarly to `ManuallyDrop` in that it would suppress drop glue for a wrapped value,
   but as a pointer (like `&move`) rather than a by-value container.
   The `DropPtr` type would then become the receiver of the `Drop::drop` method.
   In response, @eddyb proposed an alternative, unsafely constructible `Interior<T>` type that would hold a `T` by value
-  and suppress its destructor but allow only field access (and moves) rather than full access to the stored `T`.
+  and prevent its drop glue from running but allow only field access (and moves) rather than full access to the stored `T`.
   This could become the argument type of `Drop::drop`.
   This discussion did not reach a conclusion; it also considered possibly having multiple, by-value as well as by-reference,
   variants of the `Drop` trait.
@@ -516,7 +538,7 @@ Chronologically:
 - 2024-12-08:
   #### [RFC #3738: Drop type destructuring](https://github.com/rust-lang/rfcs/pull/3738)
 
-  Proposes a `destructure!` macro that allows moving fields out of a type that implements `Drop` without its destructor running.
+  Proposes a `destructure!` macro that allows moving fields out of a type that implements `Drop` while suppressing its drop glue.
   This is not sufficient for the C++ or recursive data structure use cases, but has some conceptual overlap.
   The current idiom for writing operations of this form also relies on `ManuallyDrop`.
 
