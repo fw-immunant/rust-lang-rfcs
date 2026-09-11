@@ -406,8 +406,60 @@ avoiding confusion due to the reversed order required by manual construction of 
 
 ## Reference-level explanation
 
-TODO
+### Changes to Rust Reference
 
+A number of existing concepts in the Rust Reference should be modified or added; their new contents are given below:
+
+#### Special types and traits
+
+> # Drop
+>
+> The `Drop` trait provides a hook that is called by the default implementation of the destructor for a type.
+> When implemented, fields of this type may no longer be moved out from.
+
+> # Destruct
+>
+> The `Destruct` trait captures all types that can be destroyed (at present, this is all types), and allows to customize their destructor.
+> The default implementation of this destructor runs the implementation of `Drop::drop` for a type, then drops its fields.
+> When a non-default implementation of the Drop::drop_in_place method is provided, the implementation of `Drop::drop` is not run,
+> and fields are not automatically destroyed. It is then the responsibility of a custom implementation of `Destruct::drop_in_place`
+> to perform all cleanup necessary for values of the type.
+
+#### Destructors
+
+> r[destructors.operation]
+> The default destructor of a type `T` consists of:
+>
+> 1. If `T: Drop`, calling [`<T as core::ops::Drop>::drop`](core::ops::Drop::drop)
+> 2. Recursively running the destructor of all of its fields.
+>     * The fields of a [struct] are dropped in declaration order.
+>     * The fields of the active [enum variant] are dropped in declaration order.
+>     * The fields of a [tuple] are dropped in order.
+>     * The elements of an [array] or owned [slice] are dropped from the first element to the last.
+>     * The variables that a [closure] captures by move are dropped in an unspecified order.
+>     * [Trait objects] run the destructor of the underlying type.
+>     * Other types don't result in any further drops.
+>
+> For user-defined type, the default destructor above can be [replaced by a custom destructor](#custom-destructors) by providing an implementation of the `std::marker::Destruct` trait.
+
+> r[destructors.custom]
+> ## Custom destructors
+>
+> A user-defined type may have a custom destructor defined, which entirely replaces the [default destructor](#r-destructors.operation).
+>
+> This definition is specified by implementing the `Destruct::drop_in_place` trait method:
+>
+> ```rust
+> struct<T> Foo(T);
+>
+> impl Destruct for Foo {
+>     unsafe fn drop_in_place(to_drop: &mut Self) {
+>         Destruct::drop_in_place(&mut to_drop.0);
+>     }
+> }
+> ```
+>
+> When this trait method is implemented, it fully replaces the default destructor, so `Drop::drop` is not called for the value.
 
 ## Drawbacks
 
