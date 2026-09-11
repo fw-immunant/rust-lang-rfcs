@@ -120,53 +120,75 @@ but destructors with side effects do exist and are an important use case for int
 
 ```rust
 #![feature(const_destruct)]
-use std::marker::Destruct;
-use std::mem::MaybeUninit;
 
-unsafe extern "C" {
-    // Safety: The passed pointer must be valid for a UringState.
-    unsafe fn uring_state_ctor(_: *mut UringState);
-    // Safety: must be called on an existing UringState instance and must not be called twice.
-    unsafe fn uring_state_dtor(_: *mut UringState);
-}
+mod uring {
+    use std::marker::Destruct;
+    use std::mem::MaybeUninit;
 
-#[repr(C)]
-struct Uring {
-    raw: *mut std::ffi::c_void,
-}
+    unsafe extern "C" {
+        // Safety: The passed pointer must be valid for a UringState.
+        unsafe fn uring_state_ctor(_: *mut UringState);
+        // Safety: must be called on an existing UringState instance and must not be called twice.
+        unsafe fn uring_state_dtor(_: *mut UringState);
+    }
 
-#[derive(Copy, Clone)]
-#[repr(C)]
-struct UringBuf {
-    buf: [u8; 64],
-}
+    #[repr(C)]
+    pub struct Uring {
+        raw: *mut std::ffi::c_void,
+    }
 
-#[repr(C)]
-struct UringState {
-    ring: Uring,
-    buffers: [UringBuf; 16],
-}
+    #[derive(Copy, Clone)]
+    #[repr(C)]
+    struct UringBuf {
+        buf: [u8; 64],
+    }
 
-impl Destruct for UringState {
-    unsafe fn drop_in_place(to_drop: &mut Self) {
-        // SAFETY: This module does not export any constructor for `UringState`, which has private fields.
-        // As such, code in this module must justify construction of `UringState` and should initialize
-        // instances of it by calling the C++ constructor, `uring_state_ctor`. If this has been done,
-        // then this call to `uring_state_dtor` is ending the lifetime of an existing instance of `UringState`.
-        // No accesses to `to_drop` or its fields occur after this call, so there is no use after drop.
-        unsafe { uring_state_dtor(to_drop) }
+    #[repr(C)]
+    pub struct UringState {
+        /// The UringState's associted Uring. May be passed to other methods by reference.
+        pub ring: Uring,
+        buffers: [UringBuf; 16],
+    }
+
+    impl UringState {
+        pub fn new() -> Self {
+            let mut uring_state: MaybeUninit<UringState> = MaybeUninit::uninit();
+            // SAFETY: we are passing a raw pointer to a stack-allocated MaybeUninit<UringState>
+            // to its constructor, so the pointer is valid and aligned for the type.
+            unsafe { uring_state_ctor(uring_state.as_mut_ptr()); }
+            // SAFETY: the constructor call initialized `uring_state`.
+            unsafe { uring_state.assume_init() }
+        }
+    }
+
+    // Disable moves out of our fields.
+    impl Drop for UringState {
+        fn drop(&mut self) {}
+    }
+
+    impl Destruct for UringState {
+        unsafe fn drop_in_place(to_drop: &mut Self) {
+            // SAFETY: This module does not export any constructor for `UringState`, which has private fields.
+            // As such, code in this module must justify construction of `UringState` and should initialize
+            // instances of it by calling the C++ constructor, `uring_state_ctor`. If this has been done,
+            // then this call to `uring_state_dtor` is ending the lifetime of an existing instance of `UringState`.
+            // No accesses to `to_drop` or its fields occur after this call, so there is no use after drop.
+            unsafe { uring_state_dtor(to_drop) }
+        }
     }
 }
 
+// Demonstrates access to the Uring field.
+fn use_uring(_: &mut uring::Uring) {}
+
 fn main() {
-    let mut uring_state: MaybeUninit<UringState> = MaybeUninit::uninit();
-    // SAFETY: we are passing a raw pointer to a stack-allocated MaybeUninit<UringState>
-    // to its constructor, so the pointer is valid and aligned for the type.
-    unsafe { uring_state_ctor(uring_state.as_mut_ptr()); }
-    // SAFETY: the constructor call initialized `uring_state`.
-    let uring_state = unsafe { uring_state.assume_init() };
+    let mut uring_state = uring::UringState::new();
+    use_uring(&mut uring_state.ring);
 }
 ```
+
+This example demonstrates binding a C++ type while exposing a field to public access,
+but ensuring that the type is only destroyed by its C++ destructor.
 
 #### Avoiding stack overflow dropping recursive ADTs
 
