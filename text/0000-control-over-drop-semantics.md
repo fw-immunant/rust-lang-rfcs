@@ -211,7 +211,7 @@ when our algorithm is meant as a drop-in replacement of the default one.
 For all these reasons, some form of compiler support seems highly desirable.
 
 Indeed, allowing to specify a drop-in replacement of the default destruction behavior of Rust types is exactly what the current RFC is about,
-and the `Drop` trait already allows types to opt out of destructuring pattern matching,
+and the `Drop` trait already allows types to opt out of destructuring moves for their non-`Copy` fields,
 so it seems advantageous to ensure that implementing the `Destruct` trait does not prevent types from being destruct*ured*.
 
 Furthermore, [previous discussion of C++ interop for destruction](https://github.com/rust-lang/lang-team/issues/135)
