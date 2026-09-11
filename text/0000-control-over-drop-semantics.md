@@ -312,10 +312,12 @@ Note that:
      It might be convenient to add this to expose only the recursive portion of drop glue, but this is not strictly
      necessary; a user can also manually call `Destruct::drop_in_place` on each field in sequence.
   2. The default behavior runs the `Drop` impl for the type before dropping individual fields.
-     It would be advantageous to allow an explicit implementation of `Destruct` to somehow call into `Drop`,
-     whereas prior to this rfc it is impossible to explicitly invoke `.drop()`.
-     This makes `Drop` and `Destruct` more orthogonal, leaving "custom cleanup for this type but not its fields" to the `Drop` trait.
-     It is not preferable to make `Drop` and `Destruct` mutually exclusive because
+     It might be advantageous to allow an explicit implementation of `Destruct` to somehow call into `Drop`,
+     whereas currently it is impossible to explicitly invoke `.drop()`.
+     This would make `Drop` and `Destruct` more orthogonal, leaving "custom cleanup for this type but not its fields" to the `Drop` trait.
+     When `Destruct::drop_in_place` has a custom implementation, any cleanup that was performed in `Drop::drop` for that type
+     will not run and should instead be moved into the implementation of `Destruct::drop_in_place`.
+     It is not preferable to make it an error to implement both the `Drop` and `Destruct` traits because
      implementing the `Drop` trait disables destructuring moves from a type non-Copy's fields,
      which existing code already relies on for encapsulation.
 
@@ -610,6 +612,10 @@ Chronologically:
 
 ## Unresolved questions
 
+1. Should we allow calling `Drop::drop` from `Destruct::drop_in_place`,
+   or should (as proposed here) it be an error to provide a non-empty body for `Drop::drop` when
+   `Destruct::drop_in_place` has a non-default implementation?
+   The two traits cannot be reasoned about independently, but it is nontrivial to merge them into a single trait (see "Fixing `Drop` so we don't need `Destruct`" in the Prior art section).
 
 ## Future possibilities
 
