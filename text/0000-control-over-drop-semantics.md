@@ -388,6 +388,15 @@ Chronologically:
   This mostly concerns being able to prevent drop glue from running, while potentially moving fields out.
   `ManuallyDrop` seems to cover this use case now.
 
+- 2015-01-27:
+  #### [RFCs issue #744: should struct fields and array elements be dropped in reverse declaration order (a la C++)](https://github.com/rust-lang/rfcs/issues/744)
+
+  The "right" order to drop elements of aggregate types was discussed extensively here.
+  It was mostly agreed that the drop order implemented by Rust (order of declaration for structs, generally left-to-right and top-to-bottom)
+  was not ideal as it is the opposite of the order for locals, but by this time it was too late to suddenly change it
+  due to existing code depending on the drop order.
+  The discussion also concludes that there is not a single drop order that is obviously best for all code.
+
 - 2015-02-04:
   #### [Moves from `self` during the drop hook](https://internals.rust-lang.org/t/moves-from-self-during-the-drop-hook/1536)
 
@@ -422,15 +431,6 @@ Chronologically:
   It left open the possibility of alternative drop ordering being possible in the future:
 
   > Finally, in case people really dislike the current drop order, it may still be possible to introduce alternative, opt-in, drop orders in a backwards compatible way. However, that is not covered in this RFC \[(#1857)\].
-
-- 2017-01-27:
-  #### [RFCs issue #744: should struct fields and array elements be dropped in reverse declaration order (a la C++)](https://github.com/rust-lang/rfcs/issues/744)
-
-  The "right" order to drop elements of aggregate types was discussed extensively here.
-  It was mostly agreed that the drop order implemented by Rust (order of declaration for structs, generally left-to-right and top-to-bottom)
-  was not ideal as it is the opposite of the order for locals, but by this time it was too late to suddenly change it
-  due to existing code depending on the drop order.
-  The discussion also concludes that there is not a single drop order that is obviously best for all code.
 
 - 2018-10-24:
   #### [pre-RFC: the Destruct trait](https://internals.rust-lang.org/t/pre-rfc-the-destruct-trait/8658)
