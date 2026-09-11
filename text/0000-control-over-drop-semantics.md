@@ -427,6 +427,16 @@ In particular:
   which can perform the same operations currently performed in `Drop::drop`,
   and have the same interaction with potentially dangling references and `#[may_dangle]`.
 
+#### Additional interaction with `Drop`
+
+Because a custom implementation of `Destruct::drop_in_place` cannot explicitly call `Drop::drop` (no Rust code can),
+and replaces the default implementation that does invoke `Drop::drop`,
+any code in `Drop::drop` for a type will not run if a custom implementation of `Destruct::drop_in_place` exists for that type.
+A non-empty body of `Drop::drop` for a type with a custom implementation of `Destruct::drop_in_place` should be an error.
+
+Implementing the `Drop::drop` trait should not be an error, because this impl forbids moving out of fields of a type,
+which existing code relies on.
+
 ### Soundness concerns
 
 - **Safety contract.** The `drop_in_place` method is `unsafe`. It requires the caller to ensure the is the final use of the given field.
