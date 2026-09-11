@@ -279,6 +279,8 @@ trait Destruct {
     /// # Safety
     ///
     /// Calling this method on a value ends the lifetime of that value. Callers must guarantee that they will not use a value after calling this method on it.
+    /// The compiler's inserted destructor calls for a value count as uses in this sense, so the caller must guarantee it is either a `Destruct::drop_in_place` implementation itself, or that the value will not be dropped even when unwinding.
+    /// The best way to do this is to first move the value into a `std::mem::ManuallyDrop<T>`.
     unsafe fn drop_in_place(_to_drop: &mut Self);
 }
 ```
@@ -405,6 +407,41 @@ The boilerplate here could be avoided by defining a macro that accepts the list 
 avoiding confusion due to the reversed order required by manual construction of guards.
 
 ## Reference-level explanation
+
+### The `Destruct` trait
+
+The definition of the `Destruct` trait is as above in the Guide-level explanation.
+
+#### Special properties shared with `Drop`
+
+`Destruct` must inherit a number of special properties currently associated only with `Drop`.
+In particular:
+
+- `Copy` and `Destruct` should be mutually incompatible.
+- `std::mem::needs_drop` (and the underlying intrinsic) should return true for types with a custom `Destruct::drop_in_place` impl,
+  which constitutes the nontrivial drop glue that this predicate is concerned with.
+- Coherence checking for `Destruct` should obey the same rules as for `Drop`,
+  in particular, not allowing specialization or multiple disjointly-bounded generic impls.
+- `dropck` requires generic type parameters to strictly outlive the parameterized type when `Drop` is implemented.
+  This requirement should also extend to custom implementations of `Destruct::drop_in_place`,
+  which can perform the same operations currently performed in `Drop::drop`,
+  and have the same interaction with potentially dangling references and `#[may_dangle]`.
+
+### Soundness concerns
+
+- **Safety contract.** The `drop_in_place` method is `unsafe`. It requires the caller to ensure the is the final use of the given field.
+  Furthermore, the `drop_in_place` method may potentially leak any fields that it does not explicitly handle.
+  A warning should be emitted for any fields of the argument to `drop_in_place` that are not used but whose types return true from `std::mem::needs_drop<T>`.
+  To opt out of dropping such fields, they can be used in a call to `std::mem::forget`.
+  Leaking is a soundness concern for structurally pinned fields: later reuse of that memory would violate the [`Pin` drop guarantee](https://doc.rust-lang.org/std/pin/index.html#subtle-details-and-the-drop-guarantee).
+  TODO: Does this mean that in addition to the method being `unsafe`, `std::marker::Destruct` should be an `unsafe` trait?
+
+### Feature gate
+
+The examples in this RFC rely on the existing `#![feature(const_destruct)]` feature gate,
+which guards the current unstable `Destruct` trait.
+This trait currently exists for const destruction, with its accompanying gate.
+This feature should introduce its own feature gate, `destruct_drop_in_place`.
 
 ### Changes to Rust Reference
 
