@@ -221,10 +221,10 @@ touched on the desirability of still being able to pattern-match on types even i
 
 ## Guide-level explanation
 
-The `core::mem::Destruct` now exposes the following interface, which will be the entry point for all automatic object destruction:
+The `core::marker::Destruct` now exposes the following interface, which will be the entry point for all automatic object destruction:
 ```rust
 trait Destruct {
-    unsafe fn drop_in_place(&mut self);
+    unsafe fn drop_in_place(_to_drop: &mut Self);
 }
 ```
 
