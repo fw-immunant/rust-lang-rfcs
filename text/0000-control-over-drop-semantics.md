@@ -313,6 +313,32 @@ The `Destruct` trait (`std::marker::Destruct`), on the other hand, is a speciali
 
 Further cleanups of these traits would be desirable, but are outside the scope of this RFC.
 
+### Double-panics when changing drop order
+
+A significant motivation of this RFC is to facilitate changing the drop order of fields.
+The `HoldsBarFoo` example demonstrates what this might look like, but the given code does not preserve the behavior
+of built-in `Drop` with respect to panics. The default behavior when dropping a type with fields defers the first panic that may occur while
+dropping fields (and continues dropping the rest of the fields), and a second panic will immediately terminate.
+This avoids "leak amplification", where a panic in a `Drop` impl causes memory leaks of sibling fields.
+
+See [rust-lang/rust#14875](https://github.com/rust-lang/rust/issues/14875) for discussion that led to this design.
+
+This behavior can be emulated in user code, but at some ergonomic cost.
+Drawing on our `HoldsBarFoo` example, we might implement `fn drop_in_place` like this:
+```rust
+unsafe fn drop_in_place(to_drop: &mut Self) {
+    struct DropField<'a, T>(&'a mut T);
+    impl<T> Drop for DropField<'_, T> {
+        fn drop(&mut self) { unsafe { Destruct::drop_in_place(self.0) } }
+    }
+    let _df = DropField(&mut to_drop.bar);
+    let _df = DropField(&mut to_drop.foo);
+}
+```
+
+The boilerplate here could be avoided by defining a macro that accepts the list of fields to drop in order,
+avoiding confusion due to the reversed order required by manual construction of guards.
+
 ## Reference-level explanation
 
 TODO
@@ -478,64 +504,6 @@ Chronologically:
 
 ## Unresolved Questions
 
-1. A significant motivation of this RFC is to facilitate changing the drop order of fields.
-   An example demonstrates what this might look like, but the given code does not preserve the behavior
-   of built-in `Drop` with respect to panics (the first panic is temporarily caught to allow dropping subsequent fields,
-   and a second panic will immediately terminate). This avoids "leak amplification",
-   where a panic in a `Drop` impl causes memory leaks of sibling fields.
-
-   It is not clear how to cleanly emulate this drop behavior with user code.
-   Drawing on our `HoldsBarFoo` example, we might try a `fn drop_in_place` body like this:
-   ```rust
-   let mut panic_error = std::panic::catch_unwind(move || {
-       Foo::drop_in_place(&mut to_drop.foo)
-   }).err();
-   if let Err(e) = std::panic::catch_unwind(move || Bar::drop_in_place(&mut to_drop.bar)) {
-       if panic_error.is_some() {
-           std::process::abort();
-       } else {
-           panic_error = Some(e);
-       }
-   }
-   if let Some(e) = panic_error {
-       std::panic::resume_unwind(e);
-   }
-   ```
-
-   However, it is forbidden to capture these mutable references to fields in closures:
-   we get E0277 ("may not be safely transferred across an unwind boundary") whether we capture
-   the `&mut HoldsBarFoo` or mutable references to its fields separately.
-
-   How can a user do the right thing here, and how can we make this easy to do?
-
-   This does not impact the use case of calling C++ destructors,
-   as those are separately forbidden from throwing exceptions across the FFI boundary.
-
-### A leak amplification example
-
-A panicking destructor does not prevent other destructors in the same scope from running (see [rust-lang/rust#14875](https://github.com/rust-lang/rust/issues/14875)):
-```rust
-struct HoldsFooBar {
-    foo: Foo,
-    bar: Bar,
-}
-
-struct Foo;
-
-impl Drop for Foo {
-    fn drop(&mut self) { panic!(); }
-}
-
-struct Bar;
-impl Drop for Bar {
-    fn drop(&mut self) { println!("Bar dropped"); }
-}
-
-fn main() {
-    let _hfb = HoldsFooBar { foo: Foo, bar: Bar };
-}
-```
-This example prints "Bar dropped" after the panic from `Foo::drop` is displayed.
 
 ## Future possibilities
 
