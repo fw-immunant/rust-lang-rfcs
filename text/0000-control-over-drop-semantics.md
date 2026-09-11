@@ -235,6 +235,19 @@ touched on the desirability of still being able to pattern-match on types even i
 The `core::marker::Destruct` now exposes the following interface, which will be the entry point for all automatic object destruction:
 ```rust
 trait Destruct {
+    /// Destroy a value, performing any necessary cleanup. This method is called whenever a value goes out of scope without having been moved from.
+    ///
+    /// The default implementation of this method calls `Drop::drop`, then drops all fields.
+    ///
+    /// # Custom implementations
+    /// Custom implementations of this method cannot call `Drop::drop` (as that method may not be called explicitly), and must assume its responsibilities. It is therefore an error to have a custom implementation of this method and also have a non-empty implementation of `Drop::drop`.
+    /// However, implementing the `std::mem::Drop` trait is still useful as it prevents the fields of a type from being moved out of.
+    ///
+    /// Any fields of the value passed to this method that are not themselves passed to `Destruct::drop_in_place` for their type will leak any associated resources.
+    ///
+    /// # Safety
+    ///
+    /// Calling this method on a value ends the lifetime of that value. Callers must guarantee that they will not use a value after calling this method on it.
     unsafe fn drop_in_place(_to_drop: &mut Self);
 }
 ```
