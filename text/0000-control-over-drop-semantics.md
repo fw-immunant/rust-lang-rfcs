@@ -86,13 +86,13 @@ impl Drop for Bar {
 }
 
 // Normally, fields would be dropped in declaration order, with `bar` dropped before `foo`.
-struct HoldsBoth {
+struct HoldsBarFoo {
     bar: Bar,
     foo: Foo,
 }
 
 // Drop `foo` before `bar`.
-impl Destruct for HoldsBoth {
+impl Destruct for HoldsBarFoo {
     unsafe fn drop_in_place(to_drop: &mut Self) {
         Destruct::drop_in_place(&mut to_drop.foo);
         Destruct::drop_in_place(&mut to_drop.bar);
@@ -483,7 +483,7 @@ Chronologically:
    where a panic in a `Drop` impl causes memory leaks of sibling fields.
 
    It is not clear how to cleanly emulate this drop behavior with user code.
-   Drawing on our `HasBoth` example, we might try a `fn drop_in_place` body like this:
+   Drawing on our `HoldsBarFoo` example, we might try a `fn drop_in_place` body like this:
    ```rust
    let mut panic_error = std::panic::catch_unwind(move || {
        Foo::drop_in_place(&mut to_drop.foo)
@@ -502,7 +502,7 @@ Chronologically:
 
    However, it is forbidden to capture these mutable references to fields in closures:
    we get E0277 ("may not be safely transferred across an unwind boundary") whether we capture
-   the `&mut HoldsBoth` or mutable references to its fields separately.
+   the `&mut HoldsBarFoo` or mutable references to its fields separately.
 
    How can a user do the right thing here, and how can we make this easy to do?
 
