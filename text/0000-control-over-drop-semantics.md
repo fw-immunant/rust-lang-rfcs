@@ -437,6 +437,12 @@ Chronologically:
 
   > Finally, in case people really dislike the current drop order, it may still be possible to introduce alternative, opt-in, drop orders in a backwards compatible way. However, that is not covered in this RFC \[(#1857)\].
 
+  2017-01-20:
+  #### [RFC #1860: Manually Drop](https://github.com/rust-lang/rfcs/blob/master/text/1860-manually-drop.html)
+
+  This RFC introduced the `ManuallyDrop<T>` type, which is a first step towards making it practical to control how fields of a type are dropped,
+  but presents the ergonomic and maintenance problems that motivate the current RFC.
+
 - 2018-10-24:
   #### [pre-RFC: the Destruct trait](https://internals.rust-lang.org/t/pre-rfc-the-destruct-trait/8658)
 
