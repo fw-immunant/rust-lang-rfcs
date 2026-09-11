@@ -60,7 +60,7 @@ and the diff on [rust-lang/rust PR #76150](https://github.com/rust-lang/rust/pul
 to use ManuallyDrop for this purpose (though the Rustonomicon contains an
 [outdated such suggestion](https://doc.rust-lang.org/nomicon/dropck.html#a-related-side-note-about-drop-order)).
 One reason for this is that if a custom `Drop` impl does not switch from unwinding to aborting for the second panic, some fields will simply be leaked,
-which can be a soundness issue if a type which is `Pin` has its destructor skipped
+which can be a soundness issue if a type which is `Pin` has its destructor skipped and its memory is reused
 (see [Pin's documentation](https://doc.rust-lang.org/std/pin/index.html#subtle-details-and-the-drop-guarantee:)).
 
 So we take it as granted that some types will have side-effects in their `Drop` implementations that might be mediated through I/O or FFI,
