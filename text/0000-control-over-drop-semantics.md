@@ -145,7 +145,7 @@ mod uring {
 
     #[repr(C)]
     pub struct UringState {
-        /// The UringState's associted Uring. May be passed to other methods by reference.
+        /// The UringState's associated Uring. May be passed to other methods by reference.
         pub ring: Uring,
         buffers: [UringBuf; 16],
     }
