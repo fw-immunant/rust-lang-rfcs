@@ -254,9 +254,13 @@ struct BoxedFd {              │     Drop::drop(self); // A custom impl could n
 
 Note that:
   1. The default behavior runs the `Drop` impl for the type before dropping individual fields.
-     An explicit implementation of `Destruct` could not call into `Drop`, because explicitly invoking `.drop()` is forbidden.
-     As such, it is an error to implement both `Destruct` and `Drop` for the same type.
-  2. `core::intrinsics::drop_fields_in_place` intrinsic does not actually exist.
+     It would be advantageous to allow an explicit implementation of `Destruct` to somehow call into `Drop`,
+     whereas prior to this rfc it is impossible to explicitly invoke `.drop()`.
+     This makes `Drop` and `Destruct` more orthogonal, leaving "custom cleanup for this type but not its fields" to the `Drop` trait.
+     It is not preferable to make `Drop` and `Destruct` mutually exclusive because
+     implementing the `Drop` trait disables destructuring moves from a type non-Copy's fields,
+     which existing code already relies on for encapsulation.
+  2. The `core::intrinsics::drop_fields_in_place` intrinsic does not actually exist.
      It might be convenient to add this to expose only the recursive portion of drop glue, but this is not strictly
      necessary; a user can also manually call `Destruct::drop_in_place` on each field in sequence.
 
@@ -487,9 +491,8 @@ Chronologically:
   This is not sufficient for the C++ or recursive data structure use cases, but has some conceptual overlap.
   The current idiom for writing operations of this form also relies on `ManuallyDrop`.
 
-  In the current RFC, types that desire this pattern could be redefined using `Destruct` instead of `Drop`,
-  which would enable pattern matching on them; they would need to rely on privacy to prevent fields being moved out
-  by code outside of their defining module.
+  In the current RFC, types that desire this pattern could be redefined using `Destruct` without a `Drop` impl,
+  which would enable pattern matching on them. Types that want to prevent fields being moved out would additionally impl `Drop`.
 
 - 2026-03-21:
   #### [Fixing `Drop` so we don't need `Destruct`](https://rust-lang.zulipchat.com/#narrow/channel/213817-t-lang/topic/Fixing.20.60Drop.60.20so.20we.20don.27t.20need.20.60Destruct.60)
@@ -497,10 +500,8 @@ Chronologically:
   Plans steps to fix the useless and confusing meaning of `Drop` bounds in future Rust editions,
   while unifying the `Destruct` and `Drop` traits.
 
-  This would not conflict with the current proposal, but would mean that instead of the current proposal's suggested error when
-  both `Drop` and `Destruct` are implemented , it would be an error to implement both the `drop` and `drop_in_place` methods of the `Drop` trait.
-  The differing semantics of these two methods (`drop` having fields automatically dropped afterward while `drop_in_place` does not)
-  might call for other renamings to maintain clarity.
+  This would not conflict with the current proposal, but would mean that the `drop` and `drop_in_place` methods would both exist on the `Drop` trait.
+  The differing semantics of these two methods might call for renaming `drop_in_place` to maintain clarity.
 
 ## Unresolved Questions
 
