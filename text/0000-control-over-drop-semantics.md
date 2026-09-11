@@ -19,7 +19,7 @@ The current way to handle the lack of control over drop semantics is to wrap ind
 and then use unsafe code in a `Drop` impl.
 For the various use cases that might non-default destruction behavior, this solution falls short in different respects.
 
-### C++ Compatibility Hazards
+### C++ compatibility hazards
 
 Using `ManuallyDrop` on fields makes object construction more verbose,
 but more importantly it raises compatibility hazards for bindings that expose foreign (e.g. C++) types in Rust.
@@ -45,7 +45,7 @@ but many past proposals suggest by-value `Drop`, and these efforts have not been
 
 These examples compile and run with the PoC branch of the compiler.
 
-#### Changing Drop Order
+#### Changing drop order
 
 Rust currently guarantees that fields are dropped in their declaration order.
 Users can reorder fields to change this ordering (independently from changing the type's in-memory layout, if `#[repr(C)]` is not applied),
@@ -148,7 +148,7 @@ fn main() {
 }
 ```
 
-#### Avoiding Stack Overflow Dropping Recursive ADTs
+#### Avoiding stack overflow dropping recursive ADTs
 
 One use case for customizing destruction behavior for types would be to avoid an undesirable attributes of the default behavior,
 its propensity for stack overflow when dropping deeply nested recursive data structures.
@@ -203,7 +203,7 @@ While they note (§3.1) that their technique is not always applicable in Rust wi
 (because there may not be enough bits available in enum tags to track the necessary intermediate states of cleanup),
 this limitation could be overcome with explicit opt-in from the user, or possibly with an attribute macro on the type definition.
 
-##### Destructuring/Pattern Matching
+##### Destructuring/pattern matching
 
 The authors mention another limitation which suggests that it would be useful for this proposal to *not* forbid
 pattern matching on types with custom destruction behavior:
@@ -264,7 +264,7 @@ Note that:
      It might be convenient to add this to expose only the recursive portion of drop glue, but this is not strictly
      necessary; a user can also manually call `Destruct::drop_in_place` on each field in sequence.
 
-### An Example
+### An example
 To demonstrate how the new API would be used, the following example:
 
 ```rust
@@ -503,7 +503,7 @@ Chronologically:
   This would not conflict with the current proposal, but would mean that the `drop` and `drop_in_place` methods would both exist on the `Drop` trait.
   The differing semantics of these two methods might call for renaming `drop_in_place` to maintain clarity.
 
-## Unresolved Questions
+## Unresolved questions
 
 
 ## Future possibilities
