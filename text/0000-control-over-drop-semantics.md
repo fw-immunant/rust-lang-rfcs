@@ -527,4 +527,4 @@ Chronologically:
 ## Future possibilities
 
 - Declarative control over drop order?
-- `#[derive(efficient_drop)]`?
+- `#[derive(iterative_drop)]` for recursive types?
