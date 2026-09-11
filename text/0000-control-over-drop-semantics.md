@@ -370,6 +370,9 @@ TODO
   - "dropping" a value is allowing it to go out of scope without having been moved from, and is when a call to drop glue is inserted.
   - "drop glue" is a term that refers to the whole of cleanup done for a value when it goes out of scope,
     which generally consists of running the `Drop` impl for a value of the type and then dropping its fields.
+  - "destruction behavior" is used as a synonym for "drop glue". This term is hopefully more self-explanatory than
+    "drop glue", which is a Rust-ism; it also makes sense when used to compare against other languages which do
+    perform operations when a value is destroyed but do not have a notion of "drop glue" as such.
   - "destructor" is not a well-defined term in Rust, and this RFC tries to avoid using it to reference Rust values in favor
     of explicitly referring to either "drop glue" (which includes cleanup for the value itself as well as for its fields) or
     `Drop::drop` (which performs only cleanup for resources represented by the value itself, not its fields).
