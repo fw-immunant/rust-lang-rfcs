@@ -269,11 +269,11 @@ struct BoxedFd {              │     Drop::drop(self); // A custom impl could n
                               │                               └─────────────────┐
              ┌────────────────V───────────────┐                                 │
              │ impl Drop for BoxedFd {        │       ┌─────────────────────────V────────────────────────────┐
-             │     fn drop(&mut self) {       │       │ "drop glue"                                          │
-             │         close(*self.boxed_fd); │       │ core::intrinsics::drop_fields_in_place(&mut self) {  │
-             │     }                          │       │     Destruct::drop_in_place(&raw self.boxed_fd)      │
-             │ }                              │       │ }                                                    │
-             └────────────────────────────────┘       └──────────────────────────────────────────────────────┘
+             │     fn drop(&mut self) {       │       │ core::intrinsics::drop_fields_in_place(&mut self) {  │
+             │         close(*self.boxed_fd); │       │     Destruct::drop_in_place(&raw self.boxed_fd)      │
+             │     }                          │       │ }                                                    │
+             │ }                              │       └──────────────────────────────────────────────────────┘
+             └────────────────────────────────┘
 ```
 
 Note that:
