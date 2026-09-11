@@ -410,9 +410,9 @@ Chronologically:
 - 2015-04-08:
   #### [Pre-RFC: allow by-value drop](https://internals.rust-lang.org/t/pre-rfc-allow-by-value-drop/1845)
 
-  Proposes a `Destroy` trait that accepts `self` by value.
-  This trait would not impede destructuring; the idea is that impls of `Destroy::destroy` would destructure
-  or `std::mem::leak` their argument.
+  Proposes a `Destruct` trait that accepts `self` by value.
+  This trait would not impede destructuring; the idea is that impls of `Destruct::destroy` would destructure
+  or `std::mem::forget` their argument.
 
   Note, by-value drop is problematic due to interactions with DSTs.
 
