@@ -475,7 +475,7 @@ Chronologically:
 - 2024-06-08:
   #### [Destructuring Droppable structs](https://internals.rust-lang.org/t/destructuring-droppable-structs/20993)
 
-  Proposes to turn E509 (moving out of a type that impls `Drop`) from an error into a warning.
+  Proposes to turn E0509 (moving out of a type that impls `Drop`) from an error into a warning.
 
   Though related to other proposals to allow destructuring in the presence of a `Drop` impl,
   this does not provide an alternative for the use cases of the current RFC.
