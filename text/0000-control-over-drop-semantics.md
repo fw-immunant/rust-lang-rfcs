@@ -117,8 +117,14 @@ but destructors with side effects do exist and are an important use case for int
 ```rust
 #![feature(const_destruct)]
 use std::marker::Destruct;
+use std::mem::MaybeUninit;
 
-extern "C" { fn cpp_dtor_uring_state(this: *mut UringState); }
+unsafe extern "C" {
+    // Safety: The passed pointer must be valid for a UringState.
+    unsafe fn uring_state_ctor(_: *mut UringState);
+    // Safety: must be called on an existing UringState instance and must not be called twice.
+    unsafe fn uring_state_dtor(_: *mut UringState);
+}
 
 #[repr(C)]
 struct Uring {
@@ -139,12 +145,17 @@ struct UringState {
 
 impl Destruct for UringState {
     unsafe fn drop_in_place(to_drop: &mut Self) {
-        cpp_dtor_uring_state(to_drop);
+        uring_state_dtor(to_drop);
     }
 }
 
 fn main() {
-  UringState { ring: Uring { raw: std::ptr::null_mut() }, buffers: [UringBuf { buf: [0; 64] }; 16] };
+    let mut uring_state: MaybeUninit<UringState> = MaybeUninit::uninit();
+    // SAFETY: we are passing a raw pointer to a stack-allocated MaybeUninit<UringState>
+    // to its constructor, so the pointer is valid and aligned for the type.
+    unsafe { uring_state_ctor(uring_state.as_mut_ptr()); }
+    // SAFETY: the constructor call initialized `uring_state`.
+    let uring_state = unsafe { uring_state.assume_init() };
 }
 ```
 
