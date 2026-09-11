@@ -308,16 +308,16 @@ struct BoxedFd {              │     Drop::drop(self); // A custom impl could n
 ```
 
 Note that:
-  1. The default behavior runs the `Drop` impl for the type before dropping individual fields.
+  1. The `core::intrinsics::drop_fields_in_place` intrinsic does not actually exist.
+     It might be convenient to add this to expose only the recursive portion of drop glue, but this is not strictly
+     necessary; a user can also manually call `Destruct::drop_in_place` on each field in sequence.
+  2. The default behavior runs the `Drop` impl for the type before dropping individual fields.
      It would be advantageous to allow an explicit implementation of `Destruct` to somehow call into `Drop`,
      whereas prior to this rfc it is impossible to explicitly invoke `.drop()`.
      This makes `Drop` and `Destruct` more orthogonal, leaving "custom cleanup for this type but not its fields" to the `Drop` trait.
      It is not preferable to make `Drop` and `Destruct` mutually exclusive because
      implementing the `Drop` trait disables destructuring moves from a type non-Copy's fields,
      which existing code already relies on for encapsulation.
-  2. The `core::intrinsics::drop_fields_in_place` intrinsic does not actually exist.
-     It might be convenient to add this to expose only the recursive portion of drop glue, but this is not strictly
-     necessary; a user can also manually call `Destruct::drop_in_place` on each field in sequence.
 
 ### An example
 To demonstrate how the new API would be used, the following example:
