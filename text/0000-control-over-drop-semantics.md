@@ -416,12 +416,21 @@ Chronologically:
 - 2015-02-04:
   #### [Moves from `self` during the drop hook](https://internals.rust-lang.org/t/moves-from-self-during-the-drop-hook/1536)
 
-  TODO: explain and relate to the current RFC
+  Proposed a `DropPtr` type, which would behave somewhat similarly to `ManuallyDrop` in that it would suppress the destructor of a wrapped type,
+  but as a pointer (like `&move`) rather than a by-value container.
+  The `DropPtr` type would then become the receiver of the `Drop::drop` method.
+  In response, @eddyb proposed an alternative, unsafely constructible `Interior<T>` type that would hold a `T` by value
+  and suppress its destructor but allow only field access (and moves) rather than full access to the stored `T`.
+  This could become the argument type of `Drop::drop`.
+  This discussion did not reach a conclusion; it also considered possibly having multiple, by-value as well as by-reference,
+  variants of the `Drop` trait.
 
 - 2015-02-19:
   #### [Pre-RFC: Allow partial moves before `forget`](https://internals.rust-lang.org/t/pre-rfc-allow-partial-moves-before-forget/1620)
 
-  TODO: explain and relate to the current RFC
+  Proposed removing `Drop`'s restriction on moving out from fields and allowing `std::mem::forget` to be called on partially-moved values,
+  instead checking for partially-moved values at the insertion of drop glue, and requiring those values to be passed to `std::mem::forget`.
+  Abandoned in favor of a possible `Interior<T>` type as mentioned above.
 
 - 2015-04-08:
   #### [Pre-RFC: allow by-value drop](https://internals.rust-lang.org/t/pre-rfc-allow-by-value-drop/1845)
@@ -431,6 +440,8 @@ Chronologically:
   or `std::mem::forget` their argument.
 
   Note, by-value drop is problematic due to interactions with DSTs.
+
+  This proposal did not reach a conclusion, but it was considered likely backwards-compatible and deferred.
 
 - 2015-06-29:
   #### [RFC #1180: Propose `Interior<T>` data-type, to allow moves out of the dropped value during the drop hook.](https://github.com/rust-lang/rfcs/pull/1180)
