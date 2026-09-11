@@ -171,6 +171,8 @@ impl<T> Destruct for LinkedList<T> {
             // Box is destroyed here.
             temp = *rest;
         }
+        // `temp` is `Nil`, no additional destruction to do.
+        std::mem::forget(temp);
     }
 }
 
