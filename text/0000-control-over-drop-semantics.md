@@ -386,8 +386,11 @@ TODO
   - "destruction behavior" is used as a synonym for "drop glue". This term is hopefully more self-explanatory than
     "drop glue", which is a Rust-ism; it also makes sense when used to compare against other languages which do
     perform operations when a value is destroyed but do not have a notion of "drop glue" as such.
-  - "destructor" is not a well-defined term in Rust, and this RFC tries to avoid using it to reference Rust values in favor
-    of explicitly referring to either "drop glue" (which includes cleanup for the value itself as well as for its fields) or
+  - "destructor" is used by the Rust reference to [refer to the `Drop` trait](https://doc.rust-lang.org/reference/destructors.html)
+    but also as [a name for drop glue](https://doc.rust-lang.org/reference/destructors.html),
+    i.e. to refer to the entirety of what happens for when a value is dropped.
+    This RFC tries to avoid using it to reference Rust values in favor of explicitly referring to either "drop glue"
+    (which includes cleanup for the value itself as well as for its fields) or
     `Drop::drop` (which performs only cleanup for resources represented by the value itself, not its fields).
     The general term is used to refer to destructors in other languages, such as C++.
   - `Drop` is the trait that defines cleanup to be performed for the resources represented by a value of a type,
