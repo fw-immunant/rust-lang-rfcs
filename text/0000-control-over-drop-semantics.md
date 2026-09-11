@@ -53,7 +53,8 @@ but readers of Rust code are not used to the order fields being significant, and
 It is also possible to drop order by wrapping fields in `ManuallyDrop`, but this does not solve the problem in an open-shut fashion:
 the user must then write a custom `Drop` impl that drops those fields, which is not necessarily easy to do correctly.
 In particular, this impl is unlikely to exactly replicate the built-in automatic destruction behavior with respect to avoiding leak amplification.
-(The default destruction behavior temporarily catches the first panic that may occur when dropping fields, and before re-raising it, continues to drop fields, immediately aborting if a second field's drop implementation panics.)
+(The default destruction behavior continues to drop subsequent fields if a panic occurs during drop of a field,
+immediately aborting if a second field's drop implementation panics.)
 As such, it is no longer recommended (see [i.rlo discussion](https://internals.rust-lang.org/t/need-for-controlling-drop-order-of-fields/12914)
 and the diff on [rust-lang/rust PR #76150](https://github.com/rust-lang/rust/pull/76150))
 to use ManuallyDrop for this purpose (though the Rustonomicon contains an
