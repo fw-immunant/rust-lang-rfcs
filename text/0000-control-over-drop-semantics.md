@@ -94,8 +94,12 @@ struct HoldsBarFoo {
 // Drop `foo` before `bar`.
 impl Destruct for HoldsBarFoo {
     unsafe fn drop_in_place(to_drop: &mut Self) {
-        Destruct::drop_in_place(&mut to_drop.foo);
-        Destruct::drop_in_place(&mut to_drop.bar);
+        // SAFETY: Drops `.foo` and `.bar`, in that order, each via a single call to `Destruct::drop_in_place`.
+        // Neither field is used after the call to `drop_in_place`, so use-after-drop is impossible.
+        unsafe {
+            Destruct::drop_in_place(&mut to_drop.foo);
+            Destruct::drop_in_place(&mut to_drop.bar);
+        }
     }
 }
 
@@ -145,7 +149,12 @@ struct UringState {
 
 impl Destruct for UringState {
     unsafe fn drop_in_place(to_drop: &mut Self) {
-        uring_state_dtor(to_drop);
+        // SAFETY: This module does not export any constructor for `UringState`, which has private fields.
+        // As such, code in this module must justify construction of `UringState` and should initialize
+        // instances of it by calling the C++ constructor, `uring_state_ctor`. If this has been done,
+        // then this call to `uring_state_dtor` is ending the lifetime of an existing instance of `UringState`.
+        // No accesses to `to_drop` or its fields occur after this call, so there is no use after drop.
+        unsafe { uring_state_dtor(to_drop) }
     }
 }
 
@@ -357,7 +366,11 @@ Drawing on our `HoldsBarFoo` example, we might implement `fn drop_in_place` like
 unsafe fn drop_in_place(to_drop: &mut Self) {
     struct DropField<'a, T>(&'a mut T);
     impl<T> Drop for DropField<'_, T> {
-        fn drop(&mut self) { unsafe { Destruct::drop_in_place(self.0) } }
+        fn drop(&mut self) {
+            // SAFETY: We construct one drop guard per field, and its drop guard can be dropped only once,
+            // so use-after drop does not occur.
+            unsafe { Destruct::drop_in_place(self.0) }
+        }
     }
     let _df = DropField(&mut to_drop.bar);
     let _df = DropField(&mut to_drop.foo);
