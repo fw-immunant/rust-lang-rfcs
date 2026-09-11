@@ -370,7 +370,8 @@ Introducing the ability to manually implement the `Destruct` trait allows full c
   which is a blocker for the "efficient drops"/avoiding stack overflow use case for ADTs.
 - Implement with an attribute to opt out of destruction of individual fields or all fields,
   rather than enhancing the `Destruct` trait.
-  Custom cleanup logic would then go in the `Drop` trait, which is undesirable for reasons discussed in the FAQ.
+  Custom cleanup logic would then go in the `Drop` trait,
+  which as mentioned above is incompatible with the avoiding-stack-overflows use case for ADTs.
   Or maybe we could introduce an entirely separate trait for such cleanup,
   but that seems like a proliferation of magic traits since `Drop` and `Destruct` both already exist.
 
