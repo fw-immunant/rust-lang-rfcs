@@ -208,7 +208,7 @@ The above example exits cleanly with the given `Destruct` impl, but commenting o
 
 Such situations arise in the real world, e.g. [in serde_json](https://internals.rust-lang.org/t/pre-rfc-destructuring-values-that-impl-drop/10450/8).
 
-A general technique for producing destructors of this form is explored in the paper ["Efficient Deconstruction with Typed Pointer Reversal (abstract)" by Munch-Maccagnoni and Donence](https://hal.science/hal-02177326).
+A general technique for producing destructors of this form is explored in the paper ["Efficient Deconstruction with Typed Pointer Reversal (abstract)" by Munch-Maccagnoni and Douence](https://hal.science/hal-02177326).
 
 While they note (§3.1) that their technique is not always applicable in Rust without changing the definition of types
 (because there may not be enough bits available in enum tags to track the necessary intermediate states of cleanup),
